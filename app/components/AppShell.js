@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Brand from '@/app/components/Brand';
 import CommandPalette from '@/app/components/CommandPalette';
+import WorkspaceSelector from '@/app/components/WorkspaceSelector';
 import { namespace } from '@/i18n/resources';
 import { directionFor } from '@/lib/globalization';
 
@@ -76,11 +77,7 @@ export default function AppShell({ user, globalSettings, active = 'home', childr
     <div className="xz-stage">
       <header className="xz-topbar">
         <div className="mobile-brand"><Brand compact /></div>
-        <button className="workspace-switcher" type="button" aria-label="Current workspace">
-          <span className="workspace-avatar">{workspaceName.slice(0,1).toUpperCase()}</span>
-          <span className="workspace-copy"><b>{workspaceName}</b><small>{globalSettings?.country_name || 'Global workspace'}</small></span>
-          <span aria-hidden="true">⌄</span>
-        </button>
+        <WorkspaceSelector name={workspaceName} countryName={globalSettings?.country_name || 'Global workspace'} role={user?.role} />
 
         <button className="global-search" type="button" onClick={() => setCommandOpen(true)} aria-label="Open global command palette">
           <span aria-hidden="true">⌕</span><span className="global-search-copy">{shellText.commandPlaceholder || 'Search or jump anywhere…'}</span><kbd>⌘ K</kbd>
