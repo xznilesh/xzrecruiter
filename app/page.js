@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-const Brand = () => <div className="brand"><img className="brand-logo" src="/xzrecruiter-logo.png" alt="XZ Recruiter" width="205" height="30" /></div>;
+const Brand = () => <div className="brand" aria-label="XZ Recruiter"><img className="brand-logo" src="/xzrecruiter-logo.png" alt="XZ Recruiter" width="205" height="30" /></div>;
 
 export default function Home(){
   return <main>
