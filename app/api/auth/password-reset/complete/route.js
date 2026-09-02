@@ -7,7 +7,11 @@ export async function POST(req) {
   catch { return NextResponse.json({ error: 'Invalid request.' }, { status: 400 }); }
 
   const accessToken = String(body.accessToken || '');
-  const intent = String(body.intent || '');
+  let intent = String(body.intent || '');
+  if (!intent) {
+    try { intent = new URL(req.headers.get('referer') || '').searchParams.get('intent') || ''; }
+    catch {}
+  }
   const password = String(body.password || '');
   if (!accessToken || !intent) return NextResponse.json({ error: 'Reset proof is missing.' }, { status: 400 });
   if (password.length < 12) return NextResponse.json({ error: 'Use a password with at least 12 characters.' }, { status: 400 });
