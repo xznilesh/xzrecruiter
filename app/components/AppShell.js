@@ -120,7 +120,7 @@ export default function AppShell({ user, globalSettings, active = 'home', childr
     <nav className="xz-mobile-nav" aria-label="Mobile navigation">
       <Link href="/dashboard" className={active === 'home' ? 'active' : ''}><span>⌂</span><small>Home</small></Link>
       <button type="button" onClick={() => setCommandOpen(true)}><span>⌕</span><small>Search</small></button>
-      <button type="button" className="mobile-create" onClick={() => setQuickOpen(!quickOpen)}><span>＋</span><small>Create</small></button>
+      <button type="button" className="mobile-create" onClick={() => setCommandOpen(true)}><span>＋</span><small>Create</small></button>
       <Link href="/settings/global" className={active === 'settings' ? 'active' : ''}><span>⚙</span><small>Settings</small></Link>
       <button type="button" onClick={() => setUserOpen(!userOpen)}><span>•••</span><small>More</small></button>
     </nav>
