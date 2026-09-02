@@ -4,7 +4,7 @@ import { rpc } from '@/lib/supabase-api';
 
 export const dynamic = 'force-dynamic';
 
-const Brand = () => <div className="brand"><img className="brand-logo" src="/xzrecruiter-logo.png" alt="XZ Recruiter" /></div>;
+const Brand = () => <div className="brand"><img className="brand-logo" src="/xzrecruiter-logo.png" alt="XZ Recruiter" width="205" height="30" /></div>;
 
 export default async function Dashboard() {
   let user;
