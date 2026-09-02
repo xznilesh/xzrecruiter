@@ -1,4 +1,4 @@
-name: Diagnose XZRecruiter source bundle
+name: Analyze XZRecruiter source archives
 
 on:
   push:
@@ -10,29 +10,45 @@ permissions:
   contents: read
 
 jobs:
-  diagnose:
+  analyze:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Diagnose bundle chunks
+      - name: Analyze archive candidates
         shell: bash
         run: |
           set -euo pipefail
-          for f in .bootstrap/good_*; do
-            echo "=== $f ==="
-            wc -c "$f"
-            printf 'head='; head -c 48 "$f"; echo
-            printf 'tail='; tail -c 48 "$f"; echo
-            printf 'nonbase64='; LC_ALL=C grep -oba '[^A-Za-z0-9+/=\r\n]' "$f" | head -n 5 || true
-            printf 'validchars='; tr -cd 'A-Za-z0-9+/=' < "$f" | wc -c
-          done
-          cat .bootstrap/good_* | tr -cd 'A-Za-z0-9+/=' > /tmp/clean.b64
-          echo "=== cleaned aggregate ==="
-          wc -c /tmp/clean.b64
           python3 - <<'PY'
           from pathlib import Path
-          s=Path('/tmp/clean.b64').read_text()
-          print('length_mod_4=', len(s)%4)
-          print('first_padding_index=', s.find('='))
-          print('last_64=', s[-64:])
+          import base64, glob, hashlib, os, subprocess
+
+          def analyze(name, files):
+              raw=''.join(Path(f).read_text() for f in files)
+              s=''.join(ch for ch in raw if ch.isalnum() or ch in '+/=')
+              print(f'=== {name} ===')
+              print('files=', files)
+              print('len=',len(s),'mod4=',len(s)%4,'prefix=',s[:24],'suffix=',s[-24:])
+              eq=[i for i,c in enumerate(s) if c=='=']
+              print('padding_count=',len(eq),'first_padding=',eq[:10],'last_padding=',eq[-10:])
+              try:
+                  b=base64.b64decode(s, validate=True)
+                  print('strict_base64=PASS decoded=',len(b),'magic=',b[:8].hex(),'sha256=',hashlib.sha256(b).hexdigest())
+                  out=f'/tmp/{name}.bin'
+                  Path(out).write_bytes(b)
+                  p=subprocess.run(['xz','-t',out],capture_output=True,text=True)
+                  print('xz_test=',p.returncode,p.stderr.strip())
+                  if p.returncode==0:
+                      q=subprocess.run(['tar','-tJf',out],capture_output=True,text=True)
+                      lines=q.stdout.splitlines()
+                      print('tar_test=',q.returncode,'file_count=',len(lines))
+                      print('tar_first=',lines[:30])
+              except Exception as e:
+                  print('strict_base64=FAIL',repr(e))
+
+          analyze('good_00_01', ['.bootstrap/good_00','.bootstrap/good_01'])
+          analyze('good_all', sorted(glob.glob('.bootstrap/good_*')))
+          analyze('pkg_all', sorted(glob.glob('.bootstrap/pkg_*')))
+          analyze('chunk_all', sorted(glob.glob('.bootstrap/chunk_*')))
+          analyze('source_all', sorted(glob.glob('.bootstrap/source_*')))
+          analyze('runtime_all', sorted(glob.glob('.bootstrap/runtime_*')))
           PY
