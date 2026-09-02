@@ -4,14 +4,13 @@ alter table public.user_sessions
   add column if not exists agency_id uuid references public.agencies(id) on delete cascade;
 
 update public.user_sessions s
-set agency_id = x.agency_id
-from lateral (
+set agency_id = (
   select am.agency_id
   from public.agency_memberships am
   where am.user_id = s.user_id
   order by am.created_at asc
   limit 1
-) x
+)
 where s.agency_id is null;
 
 create index if not exists idx_xzrecruiter_sessions_workspace_user
