@@ -16,3 +16,7 @@ Production XZRecruiter hiring-intelligence and recruiter operating workspace.
 - Today’s hiring radar and explainable Hiring Heat
 - Company/job metrics and recruitment pipeline overview
 - Production readiness endpoint at `/api/health/ready`
+
+## Production
+- Primary URL: https://xzrecruiter.vercel.app
+- Readiness: `/api/health/ready`
