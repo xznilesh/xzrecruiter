@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "node scripts/verify.mjs"
+    "lint": "node scripts/verify.mjs",
+    "test:step2": "node scripts/step2-tests.mjs"
   },
   "dependencies": {
     "next": "16.3.3",
