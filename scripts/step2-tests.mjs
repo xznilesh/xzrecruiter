@@ -10,8 +10,10 @@ const g = await importSource('lib/globalization.js');
 const i18n = await importSource('i18n/resources.js');
 const fixtures = JSON.parse(read('tests/fixtures/global-markets.json'));
 const migration = read('supabase/migrations/20260903_step2_global_operating_foundation.sql');
-const css = read('app/foundation.css');
+const hardening = read('supabase/migrations/20260903_step2_global_integrity_hardening.sql');
+const css = `${read('app/foundation.css')}\n${read('app/step2.css')}`;
 const shell = read('app/components/AppShell.js');
+const workspaceSelector = read('app/components/WorkspaceSelector.js');
 const table = read('app/components/EnterpriseTable.js');
 const auth = read('lib/auth.js');
 const signup = read('app/api/auth/signup/route.js');
@@ -86,9 +88,10 @@ assert.equal(g.directionFor('en-AE'), 'ltr');
 assert.equal(i18n.resources.ar.shell.home, 'الرئيسية');
 assert.ok(i18n.resources.ar.settings.timezone.length > 2);
 assert.equal(i18n.translate('ar', 'common', 'save'), 'حفظ التغييرات');
+assert.ok(css.includes('[dir="rtl"]'));
 
 // Non-destructive and tenant-aware migration architecture.
-assert.ok(!/\bdrop\s+table\b|\btruncate\b|\bdelete\s+from\b/i.test(migration));
+assert.ok(!/\bdrop\s+table\b|\btruncate\b|\bdelete\s+from\b/i.test(`${migration}\n${hardening}`));
 for (const owned of ['workspace_global_settings','workspace_markets','recruitment_offices','user_global_preferences','workspace_addresses','compensation_packages','work_authorizations']) {
   const start = migration.indexOf(`create table if not exists public.${owned}`);
   assert.ok(start >= 0, `Missing ${owned}`);
@@ -97,10 +100,13 @@ for (const owned of ['workspace_global_settings','workspace_markets','recruitmen
 assert.ok(migration.includes('enable row level security'));
 assert.ok(migration.includes('xzrecruiter_update_global_settings'));
 assert.ok(migration.includes("v_role not in ('OWNER','ADMIN')"));
+assert.ok(hardening.includes('taxonomy_labels_agency'));
+for (const token of ['users_timezone_iana_check','companies_timezone_iana_check','recruitment_clients_timezone_iana_check','recruitment_jobs_timezone_iana_check','candidates_timezone_iana_check','interviews_timezone_iana_check']) assert.ok(hardening.includes(token), `Missing ${token}`);
+assert.ok(hardening.includes('recruitment_jobs_salary_period_check'));
 
 // Step 1 regression invariants remain in source.
 assert.ok(auth.includes("'__Host-xz_session'"));
-assert.ok(auth.includes("httpOnly: true"));
+assert.ok(auth.includes('httpOnly: true'));
 assert.ok(auth.includes("sameSite: 'lax'"));
 assert.ok(signup.includes('requires_email_verification'));
 assert.ok(fs.existsSync(path.join(root, 'app/api/auth/password-reset/complete/route.js')));
@@ -108,11 +114,14 @@ assert.ok(fs.existsSync(path.join(root, 'app/api/auth/verify-email/route.js')));
 assert.ok(!logo.includes('>XZ</text>'), 'Duplicate XZ wordmark returned');
 assert.ok(logo.includes('>Recruiter</text>'));
 
-// Navigation, fast-action and large-list architecture.
+// Navigation, workspace selector, fast-action and large-list architecture.
 assert.ok(shell.includes("href: '/dashboard'"));
 assert.ok(shell.includes("href: '/settings/global'"));
 assert.ok(!shell.includes("href: '#'"));
 assert.ok(shell.includes('CommandPalette'));
+assert.ok(shell.includes('WorkspaceSelector'));
+assert.ok(workspaceSelector.includes('aria-haspopup="menu"'));
+assert.ok(workspaceSelector.includes('Additional workspace switching'));
 assert.ok(table.includes('serverMode'));
 assert.ok(table.includes('onQueryChange'));
 assert.ok(table.includes('pageSize'));
@@ -122,4 +131,4 @@ assert.ok(table.includes('savedViews'));
 for (const token of ['@media(max-width:900px)','@media(max-width:480px)','.xz-mobile-nav','overflow-x:hidden','prefers-reduced-motion']) assert.ok(css.includes(token), `Missing CSS gate ${token}`);
 assert.ok(css.includes('min-width:680px') && css.includes('.table-scroll{overflow:auto'));
 
-console.log(`STEP2_QA_PASS fixtures=${fixtures.length} certified_markets=${certified.length} dst=US+EU+AU+NZ rtl=ar security=preserved`);
+console.log(`STEP2_QA_PASS fixtures=${fixtures.length} certified_markets=${certified.length} dst=US+EU+AU+NZ rtl=ar security=preserved integrity=iana+tenant`);
