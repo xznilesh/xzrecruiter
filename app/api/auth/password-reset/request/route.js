@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requestEmailProof } from '@/lib/supabase-api';
+import { rpc, requestEmailProof } from '@/lib/supabase-api';
 
 export async function POST(req) {
   let body;
@@ -10,7 +10,11 @@ export async function POST(req) {
   if (!email || !email.includes('@')) return NextResponse.json({ error: 'Enter a valid email.' }, { status: 400 });
 
   try {
-    await requestEmailProof(email, `${req.nextUrl.origin}/reset-password`);
+    const intentResult = await rpc('xzrecruiter_password_reset_intent', { p_email: email });
+    const intent = intentResult?.intent;
+    if (intent) {
+      await requestEmailProof(email, `${req.nextUrl.origin}/reset-password?intent=${encodeURIComponent(intent)}`);
+    }
   } catch (error) {
     console.error('password_reset_email_failed', error?.status || '', error?.message || '');
   }
