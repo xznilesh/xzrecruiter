@@ -16,17 +16,25 @@ export const commandCatalog = [
   { id: 'schedule-interview', label: 'Schedule interview', keywords: 'calendar event interview', group: 'Quick create', enabled: false }
 ];
 
+const RECENTS_KEY = 'xz:recent-commands';
+
 export default function CommandPalette({ open, onClose }) {
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
+  const [recentIds, setRecentIds] = useState([]);
   const inputRef = useRef(null);
+
+  useEffect(() => {
+    try { setRecentIds(JSON.parse(localStorage.getItem(RECENTS_KEY) || '[]')); } catch {}
+  }, []);
 
   const items = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return commandCatalog;
-    return commandCatalog.filter((item) => `${item.label} ${item.keywords}`.toLowerCase().includes(q));
-  }, [query]);
+    if (q) return commandCatalog.filter((item) => `${item.label} ${item.keywords}`.toLowerCase().includes(q));
+    const recent = recentIds.map((id) => commandCatalog.find((item) => item.id === id)).filter(Boolean).map((item) => ({ ...item, group: 'Recent' }));
+    return [...recent, ...commandCatalog.filter((item) => !recentIds.includes(item.id))];
+  }, [query, recentIds]);
 
   useEffect(() => {
     if (!open) return;
@@ -41,6 +49,9 @@ export default function CommandPalette({ open, onClose }) {
 
   function run(item) {
     if (!item?.enabled || !item.href) return;
+    const next = [item.id, ...recentIds.filter((id) => id !== item.id)].slice(0, 5);
+    setRecentIds(next);
+    try { localStorage.setItem(RECENTS_KEY, JSON.stringify(next)); } catch {}
     onClose?.();
     router.push(item.href);
   }
@@ -54,24 +65,10 @@ export default function CommandPalette({ open, onClose }) {
 
   return <div className="command-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
     <section className="command-palette" role="dialog" aria-modal="true" aria-label="Global command palette" onKeyDown={keyDown}>
-      <div className="command-search-row">
-        <span aria-hidden="true">⌕</span>
-        <input ref={inputRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search or jump anywhere…" aria-label="Search commands" />
-        <kbd>Esc</kbd>
-      </div>
+      <div className="command-search-row"><span aria-hidden="true">⌕</span><input ref={inputRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search or jump anywhere…" aria-label="Search commands" /><kbd>Esc</kbd></div>
       <div className="command-results" role="listbox">
-        {items.length ? items.map((item, index) => <button
-          key={item.id}
-          type="button"
-          className={`command-item ${index === active ? 'active' : ''}`}
-          onMouseEnter={() => setActive(index)}
-          onClick={() => run(item)}
-          disabled={!item.enabled}
-          role="option"
-          aria-selected={index === active}
-        >
-          <span><b>{item.label}</b><small>{item.group}</small></span>
-          {item.enabled ? <span className="command-enter">↵</span> : <span className="coming-chip">Coming later</span>}
+        {items.length ? items.map((item, index) => <button key={`${item.group}-${item.id}`} type="button" className={`command-item ${index === active ? 'active' : ''}`} onMouseEnter={() => setActive(index)} onClick={() => run(item)} disabled={!item.enabled} role="option" aria-selected={index === active}>
+          <span><b>{item.label}</b><small>{item.group}</small></span>{item.enabled ? <span className="command-enter">↵</span> : <span className="coming-chip">Coming later</span>}
         </button>) : <div className="command-empty">No matching command.</div>}
       </div>
       <footer className="command-footer"><span>↑↓ Navigate</span><span>Enter Open</span><span>⌘/Ctrl + K Anywhere</span></footer>
