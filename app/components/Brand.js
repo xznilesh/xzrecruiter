@@ -9,6 +9,7 @@ export default function Brand({ href = '/', compact = false }) {
     width={compact ? 170 : 196}
     height={compact ? 55 : 63}
     priority
+    unoptimized
   />;
 
   return href ? <Link className="brand" href={href} aria-label="XZ Recruiter home">{image}</Link> : <div className="brand" aria-label="XZ Recruiter">{image}</div>;
