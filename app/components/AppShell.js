@@ -31,8 +31,10 @@ const navigation = [
     { key: 'reports', label: 'Reports', icon: '▥' }, { key: 'analytics', label: 'Analytics', icon: '⌁' }
   ]},
   { label: 'ADMIN', items: [
-    { key: 'integrations', label: 'Integrations', icon: '⌘' }, { key: 'team', label: 'Team', href: '/onboarding?section=team&edit=1', icon: '◉', enabled: true },
-    { key: 'settings', label: 'Settings', href: '/settings', icon: '⚙', enabled: true }
+    { key: 'integrations', label: 'Integrations', icon: '⌘' },
+    { key: 'team', label: 'Team', href: '/onboarding?section=team&edit=1', icon: '◉', enabled: true },
+    { key: 'settings', label: 'Configuration Center', href: '/settings', icon: '⚙', enabled: true },
+    { key: 'global-settings', label: 'Global Settings', href: '/settings/global', icon: '◎', enabled: true }
   ]}
 ];
 
