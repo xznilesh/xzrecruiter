@@ -3,7 +3,7 @@ const exists=p=>{if(!fs.existsSync(p))throw new Error(`missing ${p}`);return fs.
 const portalSql=exists('supabase/migrations/20260903_step5_client_vendor_portals.sql');
 const vendorResume=exists('supabase/migrations/20260903_step5_vendor_private_resume.sql');
 const files=[
- 'app/components/ClientPortalWorkspace.js','app/components/VendorPortalWorkspace.js','app/components/PortalManagerWorkspace.js',
+ 'app/components/ClientPortalWorkspace.js','app/components/VendorPortalWorkspace.js','app/components/PortalManager.js',
  'app/api/public/client-portal/feedback/route.js','app/api/public/vendor-portal/submit/route.js'
 ];
 files.forEach(exists);
@@ -20,4 +20,6 @@ const vendorUi=exists('app/components/VendorPortalWorkspace.js');
 if(!vendorUi.includes('Candidate submission')||!vendorUi.includes('Shared requirements'))throw new Error('Vendor portal workflow incomplete');
 const clientUi=exists('app/components/ClientPortalWorkspace.js');
 if(!/feedback|decision/i.test(clientUi))throw new Error('Client portal feedback workflow incomplete');
-console.log(`Step 5 portal regression checks passed (${files.length+requirements.length+8} assertions).`);
+const manager=exists('app/components/PortalManager.js');
+if(!/client|vendor/i.test(manager))throw new Error('Portal manager must expose client/vendor portal controls');
+console.log(`Step 5 portal regression checks passed (${files.length+requirements.length+9} assertions).`);
