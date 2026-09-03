@@ -27,7 +27,6 @@ const signup=read('app/api/auth/signup/route.js');
 const logo=read('public/xzrecruiter-logo.svg');
 const step2=read('supabase/migrations/20260903_step2_global_operating_foundation.sql');
 
-// Branch inheritance / Step-1 + Step-2 source must still be physically present.
 for(const p of [
   'supabase/migrations/20260903_step1_foundation_security_branding.sql',
   'supabase/migrations/20260903_step1_workspace_session_binding.sql',
@@ -36,7 +35,6 @@ for(const p of [
   'app/components/AppShell.js','app/components/EnterpriseTable.js','app/components/FormControls.js','lib/globalization.js'
 ]) assert.ok(fs.existsSync(path.join(root,p)),`Missing inherited source: ${p}`);
 
-// Step-1 security regressions.
 assert.ok(auth.includes("'__Host-xz_session'"));
 assert.ok(auth.includes('httpOnly: true'));
 assert.ok(auth.includes("sameSite: 'lax'"));
@@ -46,13 +44,11 @@ assert.ok(fs.existsSync(path.join(root,'app/api/auth/password-reset/complete/rou
 assert.ok(!logo.includes('>XZ</text>'));
 assert.ok(logo.includes('>Recruiter</text>'));
 
-// Step-2 globalization remains the only country/timezone registry.
 for(const code of ['IN','US','CA','GB','DE','FR','IT','NL','ES','IE','CH','SE','DK','NO','AE','SA','QA','BH','KW','OM','SG','AU','NZ']) assert.ok(step2.includes(`('${code}',`),`Step2 market missing ${code}`);
 assert.ok(core.includes('references public.global_country_profiles(country_code)'));
 assert.ok(rpcs.includes('public.xzrecruiter_valid_timezone'));
 assert.ok(!/country_usa|timezone_india|currency_uk/i.test(`${core}\n${rpcs}\n${imports}\n${advanced}`));
 
-// Eight representative agencies include multi-timezone US/Australia, bilingual GCC and Chatham NZ.
 assert.equal(fixtures.length,8);
 const ids=new Set(fixtures.map((x)=>x.id));
 for(const id of ['india-it','us-multi','uk-agency','germany','gcc-bilingual','singapore','australia-multi','new-zealand']) assert.ok(ids.has(id));
@@ -61,7 +57,6 @@ assert.ok(fixtures.find((x)=>x.id==='australia-multi').timezones.includes('Austr
 assert.ok(fixtures.find((x)=>x.id==='gcc-bilingual').languages.includes('ar'));
 assert.ok(fixtures.find((x)=>x.id==='new-zealand').timezones.includes('Pacific/Chatham'));
 
-// Additive schema and tenant ownership.
 const ownedTables=[
   'onboarding_progress','onboarding_section_state','agency_operating_profiles','agency_business_models','agency_market_targets',
   'agency_taxonomy_preferences','agency_icp_profiles','agency_specialization_items','recruitment_pipelines','pipeline_stages',
@@ -82,7 +77,6 @@ for(const tableName of ownedTables) assert.ok(allMigrations.includes(`'${tableNa
 assert.ok(allMigrations.includes('enable row level security'));
 assert.ok(allMigrations.includes('xzrecruiter_data_api_deny'));
 
-// Verified session and server-side workspace derivation.
 assert.ok(rpcs.includes('private.xzrecruiter_session_context'));
 assert.ok(rpcs.includes('u.email_verified_at is not null'));
 assert.ok(rpcs.includes('s.agency_id'));
@@ -93,7 +87,6 @@ for(const api of [onboardingApi,configApi,importApi]){
   assert.ok(!/body\.agencyId|body\.agency_id|p_agency_id/.test(api),'Client-controlled agency id found in API');
 }
 
-// Quick/Advanced setup, autosave/resume and completion gate.
 assert.ok(wizard.includes('Quick Setup'));
 assert.ok(wizard.includes('Advanced Setup'));
 assert.ok(wizard.includes("setTimeout(async()=>"));
@@ -106,7 +99,6 @@ assert.ok(dashboard.includes("redirect('/onboarding')"));
 assert.ok(dashboard.includes('No fake statistics'));
 assert.ok(dashboard.includes('Workspace blueprint'));
 
-// Step-2 taxonomies are reused and hierarchy can expand per agency.
 for(const domain of ['INDUSTRY','COMPANY_SIZE','COMPANY_TYPE','FUNDING_STAGE','JOB_FUNCTION','SENIORITY','EMPLOYMENT_TYPE','WORK_AUTHORIZATION_STATUS']) assert.ok(rpcs.includes(`'${domain}'`) || core.includes(`'${domain}'`));
 assert.ok(core.includes("'TECH_SOFTWARE'"));
 assert.ok(core.includes("'TECH_SAAS'"));
@@ -114,11 +106,9 @@ assert.ok(core.includes("'HEALTH_BIOTECH'"));
 assert.ok(rpcs.includes('xzrecruiter_add_custom_taxonomy'));
 assert.ok(rpcs.includes('agency_id=v_agency_id'));
 
-// Company ICP / recruitment + candidate specialization.
 for(const token of ['employee_growth_preference','hiring_volume_preference','remote_first_preference','company_scope','revenue_bands']) assert.ok(core.includes(token));
 for(const token of ["'RECRUITMENT'","'CANDIDATE'","'SALARY_BAND'","'NOTICE_PERIOD'","'WORKPLACE'"]) assert.ok(core.includes(token)||rpcs.includes(token));
 
-// Recruitment & BD pipelines are fully data-driven, persistent and configurable.
 for(const stage of ['NEW','APPLIED','SCREENING','QUALIFIED','SHORTLISTED','SUBMITTED','INTERVIEW','OFFER','PLACED','REJECTED','WITHDRAWN','ON_HOLD']) assert.ok(rpcs.includes(`'${stage}'`),`Recruitment stage missing ${stage}`);
 for(const stage of ['TARGET_ACCOUNT','LEAD','CONTACTED','CONVERSATION','MEETING','OPPORTUNITY','CLIENT','REQUIREMENT','PLACEMENT','LOST','DISQUALIFIED','NURTURE']) assert.ok(rpcs.includes(`'${stage}'`),`BD stage missing ${stage}`);
 assert.ok(rpcs.includes('required_fields'));
@@ -127,7 +117,6 @@ assert.ok(rpcs.includes('transition_rules'));
 assert.ok(wizard.includes('draggable'));
 assert.ok(wizard.includes('Save pipeline'));
 
-// Custom fields/layouts/views/assignment/permission foundations.
 for(const type of ['TEXT','LONG_TEXT','NUMBER','DECIMAL','CURRENCY','PERCENTAGE','DATE','DATETIME','CHECKBOX','SINGLE_SELECT','MULTI_SELECT','EMAIL','PHONE','URL','COUNTRY','TIMEZONE','USER','COMPANY','CANDIDATE','JOB','TAG']) assert.ok(core.includes(`'${type}'`));
 assert.ok(core.includes('validation_rules'));
 assert.ok(core.includes('custom_field_groups'));
@@ -142,16 +131,13 @@ assert.ok(table.includes('persistedSavedViews'));
 assert.ok(table.includes('onSaveView'));
 assert.ok(table.includes('onApplyView'));
 
-// Business roles, teams, territories.
 for(const role of ['OWNER','ADMIN','RECRUITMENT_MANAGER','RECRUITER','SOURCER','BUSINESS_DEVELOPMENT','ACCOUNT_MANAGER','HIRING_MANAGER','INTERVIEWER','VIEWER_ANALYST']) assert.ok(core.includes(`'${role}'`));
 for(const dimension of ['COUNTRY','REGION','CITY','INDUSTRY','JOB_FUNCTION','ACCOUNT_SEGMENT']) assert.ok(core.includes(`'${dimension}'`));
 assert.ok(rpcs.includes('xzrecruiter_save_territory'));
 
-// Presets remain proposals, not schema switches.
 for(const preset of ['TECH_AGENCY','HEALTHCARE_STAFFING','EXEC_SEARCH','FINANCE_ACCOUNTING','ENGINEERING_AGENCY','GENERAL_STAFFING','US_STAFFING','UK_RECRUITMENT','GCC_RECRUITMENT','AU_NZ_RECRUITMENT','INDIA_RECRUITMENT']) assert.ok(core.includes(`'${preset}'`));
 assert.ok(wizard.includes('Everything stays editable'));
 
-// CSV parser / mapping / idempotent staged import.
 const parsed=csv.parseCsv('Name,Email,Note\n"Jane, Doe",jane@example.com,"Senior, available"\nJohn,john@example.com,Ready');
 assert.deepEqual(parsed.headers,['Name','Email','Note']);
 assert.equal(parsed.rows.length,2);
@@ -163,21 +149,19 @@ assert.equal(candidateMapping.email,'Email');
 assert.equal(candidateMapping.phone,'Mobile');
 assert.equal(candidateMapping.country_code,'Country Code');
 assert.ok(imports.includes('idempotency_key'));
-assert.ok(imports.includes("status='DUPLICATE'"));
-assert.ok(imports.includes("status='INVALID'"));
+assert.ok(imports.includes("v_status:='DUPLICATE'"));
+assert.ok(imports.includes("v_status:='INVALID'"));
 assert.ok(imports.includes('xzrecruiter_commit_import'));
 assert.ok(importApi.includes('body.rows.length > 1000'));
 assert.ok(imports.includes('agency_company_records'));
 assert.ok(!imports.includes('insert into public.companies'));
 
-// Settings search / command palette / no fake implemented routes.
 assert.ok(settings.includes('company size'));
 assert.ok(settings.includes('Configuration Center'));
 for(const route of ['/onboarding?edit=1','/settings','/import','/onboarding?section=pipelines&edit=1']) assert.ok(commands.includes(route));
 assert.ok(!shell.includes("href: '#'"));
 assert.ok(shell.includes("href: '/settings'"));
 
-// Mobile, RTL, keyboard/accessibility static gates.
 for(const breakpoint of ['@media(max-width:900px)','@media(max-width:600px)','@media(max-width:480px)','@media(max-width:430px)','@media(max-width:390px)','@media(max-width:360px)']) assert.ok(css.includes(breakpoint),`Missing ${breakpoint}`);
 assert.ok(css.includes('[dir="rtl"]'));
 assert.ok(css.includes('prefers-reduced-motion'));
