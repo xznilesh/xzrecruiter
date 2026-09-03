@@ -5,20 +5,24 @@ import { useRouter } from 'next/navigation';
 
 export const commandCatalog = [
   { id: 'home', label: 'Go to Home', keywords: 'dashboard home radar', href: '/dashboard', group: 'Navigate', enabled: true },
+  { id: 'candidates', label: 'Open Candidates', keywords: 'candidate people resume cv', href: '/candidates', group: 'Recruitment', enabled: true },
+  { id: 'jobs', label: 'Open Jobs', keywords: 'job requisition vacancy role', href: '/jobs', group: 'Recruitment', enabled: true },
+  { id: 'pipeline', label: 'Open Recruitment Pipeline', keywords: 'application stage shortlist workflow', href: '/pipeline', group: 'Recruitment', enabled: true },
+  { id: 'interviews', label: 'Open Interviews', keywords: 'interview schedule calendar', href: '/interviews', group: 'Recruitment', enabled: true },
+  { id: 'offers', label: 'Open Offers', keywords: 'offer compensation salary', href: '/offers', group: 'Recruitment', enabled: true },
+  { id: 'placements', label: 'Open Placements', keywords: 'placement hire fee revenue', href: '/placements', group: 'Recruitment', enabled: true },
+  { id: 'create-candidate', label: 'Create candidate', keywords: 'new candidate quick create', href: '/candidates?action=create', group: 'Quick create', enabled: true },
+  { id: 'create-job', label: 'Create job', keywords: 'new job quick create', href: '/jobs?action=create', group: 'Quick create', enabled: true },
+  { id: 'schedule-interview', label: 'Schedule interview', keywords: 'calendar event interview', href: '/interviews?action=create', group: 'Quick create', enabled: true },
   { id: 'agency-setup', label: 'Open agency setup', keywords: 'onboarding quick setup advanced setup agency profile', href: '/onboarding?edit=1', group: 'Configure', enabled: true },
   { id: 'settings-center', label: 'Open Configuration Center', keywords: 'settings company size industry pipeline territory custom fields views', href: '/settings', group: 'Configure', enabled: true },
   { id: 'global-settings', label: 'Open global settings', keywords: 'country locale currency timezone language settings', href: '/settings/global', group: 'Configure', enabled: true },
   { id: 'csv-import', label: 'Import CSV data', keywords: 'import company client contact candidate csv mapping', href: '/import', group: 'Configure', enabled: true },
   { id: 'recruitment-pipeline', label: 'Configure recruitment pipelines', keywords: 'pipeline stages screening offer placed workflow', href: '/onboarding?section=pipelines&edit=1', group: 'Configure', enabled: true },
   { id: 'company-icp', label: 'Configure Company ICP', keywords: 'company size funding target account growth', href: '/onboarding?section=icp&edit=1', group: 'Configure', enabled: true },
-  { id: 'search-candidate', label: 'Search candidate', keywords: 'candidate people resume cv', group: 'Search', enabled: false },
-  { id: 'search-company', label: 'Search company', keywords: 'company hiring radar', group: 'Search', enabled: false },
-  { id: 'search-client', label: 'Search client', keywords: 'client crm', group: 'Search', enabled: false },
-  { id: 'search-job', label: 'Search job', keywords: 'job vacancy role', group: 'Search', enabled: false },
-  { id: 'create-candidate', label: 'Create candidate', keywords: 'new candidate', group: 'Quick create', enabled: false },
-  { id: 'create-job', label: 'Create job', keywords: 'new job', group: 'Quick create', enabled: false },
-  { id: 'create-client', label: 'Create client', keywords: 'new client', group: 'Quick create', enabled: false },
-  { id: 'schedule-interview', label: 'Schedule interview', keywords: 'calendar event interview', group: 'Quick create', enabled: false }
+  { id: 'search-company', label: 'Search company intelligence', keywords: 'company hiring radar signal', group: 'Intelligence', enabled: false },
+  { id: 'matches', label: 'Open Candidate Intelligence Matches', keywords: 'match fit candidate job', group: 'Intelligence', enabled: false },
+  { id: 'create-client', label: 'Create client', keywords: 'new client crm', group: 'Business', enabled: false }
 ];
 
 const RECENTS_KEY = 'xz:recent-commands';

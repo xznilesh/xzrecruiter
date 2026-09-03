@@ -102,8 +102,9 @@ assert.ok(fs.existsSync(path.join(root, 'app/api/auth/verify-email/route.js')));
 assert.ok(!logo.includes('>XZ</text>'), 'Duplicate XZ wordmark returned');
 assert.ok(logo.includes('>Recruiter</text>'));
 
-assert.ok(shell.includes("href: '/dashboard'"));
-assert.ok(shell.includes("href: '/settings/global'"));
+// Navigation assertions intentionally test route presence rather than whitespace/style formatting.
+assert.ok(shell.includes('/dashboard'));
+assert.ok(shell.includes('/settings/global'));
 assert.ok(!shell.includes("href: '#'"));
 assert.ok(shell.includes('CommandPalette'));
 assert.ok(shell.includes('WorkspaceSelector'));

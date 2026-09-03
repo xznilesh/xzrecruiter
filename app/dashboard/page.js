@@ -57,10 +57,10 @@ export default async function Dashboard({ searchParams }) {
     ['markets','Global markets','/onboarding?section=markets&edit=1'],
     ['specialization','Specializations','/onboarding?section=specialization&edit=1'],
     ['icp','Company ICP','/onboarding?section=icp&edit=1'],
-    ['pipelines','Recruitment pipeline','/onboarding?section=pipelines&edit=1'],
+    ['pipelines','Recruitment pipeline','/pipeline'],
     ['import','Import candidates','/import'],
     ['client','Add first client',null],
-    ['job','Create first job',null]
+    ['job','Create first job','/jobs?action=create']
   ];
 
   return <AppShell user={user} globalSettings={settings} active="home">
@@ -77,29 +77,29 @@ export default async function Dashboard({ searchParams }) {
     </section>
 
     <div className="fast-action-strip" aria-label="Fast actions">
-      <div><b>Start productive work</b><span>Use <kbd>Ctrl/Cmd + K</kbd> for setup, import and navigation.</span></div>
-      <Link href="/import" className="small-action">Import data</Link>
-      <Link href="/settings" className="small-action">Configuration Center</Link>
-      <button type="button" disabled title="Candidate creation arrives with the candidate module">＋ Candidate <small>Later</small></button>
-      <button type="button" disabled title="Job creation arrives with the jobs module">＋ Job <small>Later</small></button>
+      <div><b>Start productive work</b><span>Candidate → Job → Pipeline → Interview → Offer → Placement.</span></div>
+      <Link href="/candidates?action=create" className="small-action">＋ Candidate</Link>
+      <Link href="/jobs?action=create" className="small-action">＋ Job</Link>
+      <Link href="/pipeline" className="small-action">Pipeline</Link>
+      <Link href="/import" className="small-action">Import</Link>
     </div>
 
     {realMetricTotal > 0 ? <div className="dashmetrics premium-metrics">
       <div className="dmetric"><span>Tracked companies</span><b>{m.companies || 0}</b><small>real records</small></div>
-      <div className="dmetric"><span>Active jobs</span><b>{m.jobs || 0}</b><small>real records</small></div>
+      <div className="dmetric"><span>Active jobs</span><b>{m.jobs || 0}</b><small>real requisitions</small></div>
       <div className="dmetric"><span>Hot accounts</span><b>{m.hot || 0}</b><small>real scored accounts</small></div>
-      <div className="dmetric"><span>Active clients</span><b>{m.clients || 0}</b><small>workspace owned</small></div>
-    </div> : <section className="first-run-panel"><div><span className="page-kicker">No fake statistics</span><h2>Your configuration is ready. Your recruitment data is still yours to add.</h2><p>XZRecruiter will show operational metrics only after real companies, clients, jobs or candidates exist.</p></div><div className="first-run-actions"><Link href="/import">Import clients or candidates</Link><Link href="/settings?focus=icp">Review target account profile</Link><button type="button" disabled title="Manual candidate creation comes with the candidate module">Add candidate · Later</button><button type="button" disabled title="Manual job creation comes with the jobs module">Create first job · Later</button></div></section>}
+      <div className="dmetric"><span>Candidates</span><b>{m.candidates || 0}</b><small>workspace talent</small></div>
+    </div> : <section className="first-run-panel"><div><span className="page-kicker">No fake statistics</span><h2>Your configuration is ready. Start with a candidate or a job.</h2><p>Operational metrics appear only after real recruitment data exists. No demo counts are presented as production data.</p></div><div className="first-run-actions"><Link href="/candidates?action=create">Add candidate</Link><Link href="/jobs?action=create">Create first job</Link><Link href="/import">Import clients or candidates</Link><Link href="/settings?focus=icp">Review target account profile</Link></div></section>}
 
     <div className="dashboard-config-grid">
-      <section className="setup-checklist-card"><div className="panel-title-row"><div><h2>Workspace readiness</h2><p className="panel-sub">Configured items are real saved workspace settings. Optional operating data can be added when ready.</p></div><span className="panel-badge">{onboarding.progress?.progress_percent || 100}% setup</span></div><div className="setup-checklist">{checklist.map(([key,label,href]) => { const done = completed.has(key) || (key === 'client' && Number(m.clients || 0) > 0) || (key === 'job' && Number(m.jobs || 0) > 0); const body = <><span className={done ? 'check done' : 'check'}>{done ? '✓' : '○'}</span><b>{label}</b><small>{done ? 'Ready' : key === 'client' || key === 'job' ? 'Module action arrives later' : 'Optional / continue'}</small></>; return href ? <Link key={key} href={href}>{body}</Link> : <div key={key}>{body}</div>; })}</div></section>
+      <section className="setup-checklist-card"><div className="panel-title-row"><div><h2>Workspace readiness</h2><p className="panel-sub">Configured items are real saved workspace settings; ATS modules now accept live recruitment data.</p></div><span className="panel-badge">{onboarding.progress?.progress_percent || 100}% setup</span></div><div className="setup-checklist">{checklist.map(([key,label,href]) => { const done = completed.has(key) || (key === 'client' && Number(m.clients || 0) > 0) || (key === 'job' && Number(m.jobs || 0) > 0); const body = <><span className={done ? 'check done' : 'check'}>{done ? '✓' : '○'}</span><b>{label}</b><small>{done ? 'Ready' : key === 'client' ? 'CRM step later' : 'Open action'}</small></>; return href ? <Link key={key} href={href}>{body}</Link> : <div key={key}>{body}</div>; })}</div></section>
 
       <section className="global-context-card compact-context"><div><span className="eyebrow-mini">Operating context</span><h2>{settings.country_name}</h2><p>Step‑2 localization remains active.</p></div><dl><div><dt>Locale</dt><dd>{settings.locale}</dd></div><div><dt>Currency</dt><dd>{settings.currency_code}</dd></div><div><dt>Timezone</dt><dd>{settings.timezone_id}</dd></div><div><dt>Language</dt><dd>{settings.language_code?.toUpperCase()}</dd></div></dl><Link href="/settings/global">Change localization →</Link></section>
     </div>
 
     {(signals.length > 0 || pipeline.length > 0) ? <div className="panels premium-panels">
       {signals.length > 0 ? <div className="panel"><div className="panel-title-row"><div><h2>Highest-priority accounts</h2><div className="panel-sub">Only real scored intelligence appears here.</div></div><span className="panel-badge">Live intelligence</span></div><div className="table"><div className="tr head"><div>Company</div><div>Heat</div><div>Fit</div><div>Recommendation</div></div>{signals.map((s, i) => <div className="tr" key={i}><div><b>{s.name}</b><div className="row-sub">{s.why_now_summary}</div></div><div className="heat">{s.heat_score}</div><div>{s.fit_score ?? '—'}%</div><div><span className="pill">{s.recommendation}</span></div></div>)}</div></div> : null}
-      {pipeline.length > 0 ? <div className="panel"><h2>Recruitment pipeline</h2><div className="panel-sub">Actual active applications by persisted stage.</div><div className="bars">{pipeline.map((p) => <div className="barline" key={p.stage}><span>{p.stage}</span><div className="bar"><i style={{ width: `${Math.max(6, (Number(p.n) || 0) / max * 100)}%` }} /></div><b>{p.n}</b></div>)}</div></div> : null}
+      {pipeline.length > 0 ? <div className="panel"><div className="panel-title-row"><div><h2>Recruitment pipeline</h2><div className="panel-sub">Actual active applications by persisted stage.</div></div><Link href="/pipeline" className="small-action">Open pipeline</Link></div><div className="bars">{pipeline.map((p) => <div className="barline" key={p.stage}><span>{p.stage}</span><div className="bar"><i style={{ width: `${Math.max(6, (Number(p.n) || 0) / max * 100)}%` }} /></div><b>{p.n}</b></div>)}</div></div> : null}
     </div> : null}
   </AppShell>;
 }
