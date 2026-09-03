@@ -2,6 +2,7 @@ import './globals.css';
 import './foundation.css';
 import './step2.css';
 import './step3.css';
+import './step3-extra.css';
 import './step4.css';
 
 export const metadata = {

@@ -1,7 +1,7 @@
 name: XZRecruiter production verification
 on:
   push:
-    branches: [production-rebuild-v1, main, step4-global-enterprise-ats]
+    branches: [production-rebuild-v1, main, step2-global-foundation, step3-agency-onboarding, step4-global-enterprise-ats]
   pull_request:
     branches: [main, step2-global-foundation, step3-agency-onboarding]
 jobs:

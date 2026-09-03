@@ -12,6 +12,9 @@ const actions = {
   customField: ['xzrecruiter_save_custom_field', (body, token) => ({ p_token: token, p_field: body.payload || {} })],
   savedView: ['xzrecruiter_save_view', (body, token) => ({ p_token: token, p_view: body.payload || {} })],
   territory: ['xzrecruiter_save_territory', (body, token) => ({ p_token: token, p_territory: body.payload || {} })],
+  office: ['xzrecruiter_save_office', (body, token) => ({ p_token: token, p_office: body.payload || {} })],
+  layout: ['xzrecruiter_save_layout', (body, token) => ({ p_token: token, p_layout: body.payload || {} })],
+  candidateAuthorization: ['xzrecruiter_save_candidate_authorization_profile', (body, token) => ({ p_token: token, p_payload: body.payload || {} })],
   customTaxonomy: ['xzrecruiter_add_custom_taxonomy', (body, token) => ({
     p_token: token,
     p_domain: String(body.payload?.domain || ''),
