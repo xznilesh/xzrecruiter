@@ -1,0 +1,10 @@
+[
+  {"id":"india-it","name":"India IT Recruitment","country":"IN","locale":"en-IN","currency":"INR","timezones":["Asia/Kolkata"],"languages":["en","hi"],"industries":["TECHNOLOGY","TECH_SOFTWARE"],"functions":["ENGINEERING","IT"]},
+  {"id":"us-multi","name":"US Multi-timezone Staffing","country":"US","locale":"en-US","currency":"USD","timezones":["America/New_York","America/Chicago","America/Denver","America/Los_Angeles"],"languages":["en"],"industries":["TECHNOLOGY"],"functions":["ENGINEERING","SALES"]},
+  {"id":"uk-agency","name":"UK Recruitment Agency","country":"GB","locale":"en-GB","currency":"GBP","timezones":["Europe/London"],"languages":["en"],"industries":["PROFESSIONAL_SERVICES"],"functions":["FINANCE","HR"]},
+  {"id":"germany","name":"Germany Recruitment","country":"DE","locale":"de-DE","currency":"EUR","timezones":["Europe/Berlin"],"languages":["de","en"],"industries":["MANUFACTURING","TECHNOLOGY"],"functions":["ENGINEERING"]},
+  {"id":"gcc-bilingual","name":"UAE / Saudi Bilingual Agency","country":"AE","locale":"en-AE","currency":"AED","timezones":["Asia/Dubai","Asia/Riyadh"],"languages":["en","ar"],"industries":["FINANCIAL_SERVICES","HEALTHCARE"],"functions":["FINANCE","HEALTHCARE"]},
+  {"id":"singapore","name":"Singapore Agency","country":"SG","locale":"en-SG","currency":"SGD","timezones":["Asia/Singapore"],"languages":["en"],"industries":["FINTECH","TECHNOLOGY"],"functions":["DATA","PRODUCT"]},
+  {"id":"australia-multi","name":"Australia Multi-timezone Recruitment","country":"AU","locale":"en-AU","currency":"AUD","timezones":["Australia/Sydney","Australia/Brisbane","Australia/Adelaide","Australia/Perth"],"languages":["en"],"industries":["TECHNOLOGY","HEALTHCARE"],"functions":["ENGINEERING","HEALTHCARE"]},
+  {"id":"new-zealand","name":"New Zealand Agency","country":"NZ","locale":"en-NZ","currency":"NZD","timezones":["Pacific/Auckland","Pacific/Chatham"],"languages":["en"],"industries":["PROFESSIONAL_SERVICES"],"functions":["SALES","ACCOUNTING"]}
+]

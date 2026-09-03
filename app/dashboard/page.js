@@ -3,16 +3,32 @@ import { redirect } from 'next/navigation';
 import AppShell from '@/app/components/AppShell';
 import { getCurrentUser, sessionToken } from '@/lib/auth';
 import { getGlobalContext } from '@/lib/global-context';
+import { getOnboardingContext } from '@/lib/onboarding';
 import { rpc } from '@/lib/supabase-api';
 import { formatDateTime } from '@/lib/globalization';
 
 export const dynamic = 'force-dynamic';
 
-export default async function Dashboard() {
+function labelsFor(context, preferenceContext, domain) {
+  return (context?.taxonomy_preferences || [])
+    .filter((item) => item.context === preferenceContext && item.domain === domain)
+    .map((item) => item.label);
+}
+
+export default async function Dashboard({ searchParams }) {
+  const params = await searchParams;
   let user;
   try { user = await getCurrentUser(); }
   catch (error) { console.error('me_rpc_failed', error?.message); redirect('/login?error=service'); }
   if (!user) redirect('/login');
+
+  const [globalContext, onboarding] = await Promise.all([
+    getGlobalContext().catch((error) => { console.error('global_context_dashboard_failed', error?.message || ''); return null; }),
+    getOnboardingContext().catch((error) => { console.error('onboarding_context_dashboard_failed', error?.message || ''); return null; })
+  ]);
+  if (!globalContext?.settings) redirect('/login?error=service');
+  if (!onboarding) redirect('/onboarding?error=setup');
+  if (onboarding.progress?.status !== 'COMPLETED') redirect('/onboarding');
 
   const token = await sessionToken();
   let d = { metrics: { companies: 0, jobs: 0, hot: 0, clients: 0, candidates: 0 }, signals: [], pipeline: [] };
@@ -22,43 +38,68 @@ export default async function Dashboard() {
     d = result;
   } catch (error) { console.error('dashboard_rpc_failed', error?.message); }
 
-  let globalContext = null;
-  try { globalContext = await getGlobalContext(); }
-  catch (error) { console.error('global_context_dashboard_failed', error?.message || ''); }
-  const settings = globalContext?.settings || { country_name: 'Global workspace', locale: 'en-GB', currency_code: 'GBP', timezone_id: 'UTC', language_code: 'en', direction: 'LTR' };
-
+  const settings = globalContext.settings;
   const m = d.metrics || {};
   const signals = Array.isArray(d.signals) ? d.signals : [];
   const pipeline = Array.isArray(d.pipeline) ? d.pipeline : [];
   const max = Math.max(1, ...pipeline.map((x) => Number(x.n) || 0));
   const localNow = formatDateTime(new Date(), { locale: settings.locale || 'en-GB', timezone: settings.timezone_id || 'UTC' });
+  const markets = (onboarding.markets || []).filter((market) => market.target_kind === 'RECRUITING');
+  const marketNames = markets.map((market) => globalContext.countries?.find((country) => country.country_code === market.country_code)?.country_name || market.country_code);
+  const functions = labelsFor(onboarding, 'RECRUITMENT', 'JOB_FUNCTION');
+  const industries = labelsFor(onboarding, 'INDUSTRY', 'INDUSTRY');
+  const sizes = labelsFor(onboarding, 'ICP', 'COMPANY_SIZE');
+  const completed = new Set(onboarding.progress?.completed_steps || []);
+  const realMetricTotal = Number(m.companies || 0) + Number(m.jobs || 0) + Number(m.clients || 0) + Number(m.candidates || 0) + Number(m.hot || 0);
+
+  const checklist = [
+    ['profile','Agency profile','/onboarding?section=profile&edit=1'],
+    ['markets','Global markets','/onboarding?section=markets&edit=1'],
+    ['specialization','Specializations','/onboarding?section=specialization&edit=1'],
+    ['icp','Company ICP','/onboarding?section=icp&edit=1'],
+    ['pipelines','Recruitment pipeline','/onboarding?section=pipelines&edit=1'],
+    ['import','Import candidates','/import'],
+    ['client','Add first client',null],
+    ['job','Create first job',null]
+  ];
 
   return <AppShell user={user} globalSettings={settings} active="home">
-    <div className="page-heading dashboard-heading"><div><span className="page-kicker">Hiring command center</span><h1>Good to see you, {user.display_name || 'Recruiter'}.</h1><p>Prioritize hiring demand and recruitment work without losing your workspace, market or timezone context.</p></div><div className="heading-statuses"><span className="status good">● Systems operational</span><span className="status neutral">{settings.country_name} · {settings.timezone_id}</span></div></div>
+    <div className="page-heading dashboard-heading"><div><span className="page-kicker">Recruitment command center</span><h1>{params?.setup === 'complete' ? 'Your recruiter workspace is ready.' : `Good to see you, ${user.display_name || 'Recruiter'}.`}</h1><p>XZRecruiter is configured around your markets, agency focus and workflow—not a generic empty ATS.</p></div><div className="heading-statuses"><span className="status good">● Setup complete</span><span className="status neutral">{settings.country_name} · {settings.timezone_id}</span></div></div>
+
+    <section className="workspace-blueprint-card" aria-label="Recruitment workspace summary">
+      <div className="blueprint-heading"><div><span className="eyebrow-mini">Workspace blueprint</span><h2>{user.agency_name}</h2><p>{localNow}</p></div><Link href="/onboarding?edit=1" className="small-action">Edit setup</Link></div>
+      <div className="blueprint-grid">
+        <div><span>Markets</span><b>{marketNames.slice(0,5).join(' · ') || settings.country_name}</b>{marketNames.length > 5 ? <small>+{marketNames.length - 5} more</small> : null}</div>
+        <div><span>Specialization</span><b>{functions.slice(0,5).join(' · ') || 'General recruitment'}</b>{functions.length > 5 ? <small>+{functions.length - 5} more</small> : null}</div>
+        <div><span>Industries</span><b>{industries.slice(0,5).join(' · ') || 'Multi-industry'}</b>{industries.length > 5 ? <small>+{industries.length - 5} more</small> : null}</div>
+        <div><span>Target accounts</span><b>{sizes.slice(0,5).join(' · ') || 'Any company size'}</b></div>
+      </div>
+    </section>
 
     <div className="fast-action-strip" aria-label="Fast actions">
-      <div><b>Fast-action workspace</b><span>Use <kbd>Ctrl/Cmd + K</kbd> to search or jump anywhere.</span></div>
-      <Link href="/settings/global" className="small-action">Global settings</Link>
-      <button type="button" disabled title="Candidate creation arrives in a later step">＋ Candidate <small>Later</small></button>
-      <button type="button" disabled title="Job creation arrives in a later step">＋ Job <small>Later</small></button>
+      <div><b>Start productive work</b><span>Use <kbd>Ctrl/Cmd + K</kbd> for setup, import and navigation.</span></div>
+      <Link href="/import" className="small-action">Import data</Link>
+      <Link href="/settings" className="small-action">Configuration Center</Link>
+      <button type="button" disabled title="Candidate creation arrives with the candidate module">＋ Candidate <small>Later</small></button>
+      <button type="button" disabled title="Job creation arrives with the jobs module">＋ Job <small>Later</small></button>
     </div>
 
-    <div className="dashmetrics premium-metrics">
-      <div className="dmetric"><span>Tracked companies</span><b>{m.companies || 0}</b><small>global market coverage</small></div>
-      <div className="dmetric"><span>Active jobs</span><b>{m.jobs || 0}</b><small>live hiring demand</small></div>
-      <div className="dmetric"><span>Hot accounts</span><b>{m.hot || 0}</b><small>priority outreach</small></div>
+    {realMetricTotal > 0 ? <div className="dashmetrics premium-metrics">
+      <div className="dmetric"><span>Tracked companies</span><b>{m.companies || 0}</b><small>real records</small></div>
+      <div className="dmetric"><span>Active jobs</span><b>{m.jobs || 0}</b><small>real records</small></div>
+      <div className="dmetric"><span>Hot accounts</span><b>{m.hot || 0}</b><small>real scored accounts</small></div>
       <div className="dmetric"><span>Active clients</span><b>{m.clients || 0}</b><small>workspace owned</small></div>
+    </div> : <section className="first-run-panel"><div><span className="page-kicker">No fake statistics</span><h2>Your configuration is ready. Your recruitment data is still yours to add.</h2><p>XZRecruiter will show operational metrics only after real companies, clients, jobs or candidates exist.</p></div><div className="first-run-actions"><Link href="/import">Import clients or candidates</Link><Link href="/settings?focus=icp">Review target account profile</Link><button type="button" disabled title="Manual candidate creation comes with the candidate module">Add candidate · Later</button><button type="button" disabled title="Manual job creation comes with the jobs module">Create first job · Later</button></div></section>}
+
+    <div className="dashboard-config-grid">
+      <section className="setup-checklist-card"><div className="panel-title-row"><div><h2>Workspace readiness</h2><p className="panel-sub">Configured items are real saved workspace settings. Optional operating data can be added when ready.</p></div><span className="panel-badge">{onboarding.progress?.progress_percent || 100}% setup</span></div><div className="setup-checklist">{checklist.map(([key,label,href]) => { const done = completed.has(key) || (key === 'client' && Number(m.clients || 0) > 0) || (key === 'job' && Number(m.jobs || 0) > 0); const body = <><span className={done ? 'check done' : 'check'}>{done ? '✓' : '○'}</span><b>{label}</b><small>{done ? 'Ready' : key === 'client' || key === 'job' ? 'Module action arrives later' : 'Optional / continue'}</small></>; return href ? <Link key={key} href={href}>{body}</Link> : <div key={key}>{body}</div>; })}</div></section>
+
+      <section className="global-context-card compact-context"><div><span className="eyebrow-mini">Operating context</span><h2>{settings.country_name}</h2><p>Step‑2 localization remains active.</p></div><dl><div><dt>Locale</dt><dd>{settings.locale}</dd></div><div><dt>Currency</dt><dd>{settings.currency_code}</dd></div><div><dt>Timezone</dt><dd>{settings.timezone_id}</dd></div><div><dt>Language</dt><dd>{settings.language_code?.toUpperCase()}</dd></div></dl><Link href="/settings/global">Change localization →</Link></section>
     </div>
 
-    <div className="global-context-card">
-      <div><span className="eyebrow-mini">Viewer context</span><h2>{settings.country_name}</h2><p>{localNow}</p></div>
-      <dl><div><dt>Locale</dt><dd>{settings.locale}</dd></div><div><dt>Currency</dt><dd>{settings.currency_code}</dd></div><div><dt>Timezone</dt><dd>{settings.timezone_id}</dd></div><div><dt>Language</dt><dd>{settings.language_code?.toUpperCase()}</dd></div></dl>
-      <Link href="/settings/global">Change operating context →</Link>
-    </div>
-
-    <div className="panels premium-panels">
-      <div className="panel"><div className="panel-title-row"><div><h2>Today’s highest-priority accounts</h2><div className="panel-sub">Hiring Heat combines freshness, urgency, trust and your agency fit.</div></div><span className="panel-badge">Live intelligence</span></div>{signals.length ? <div className="table"><div className="tr head"><div>Company</div><div>Heat</div><div>Fit</div><div>Recommendation</div></div>{signals.map((s, i) => <div className="tr" key={i}><div><b>{s.name}</b><div className="row-sub">{s.why_now_summary}</div></div><div className="heat">{s.heat_score}</div><div>{s.fit_score ?? '—'}%</div><div><span className="pill">{s.recommendation}</span></div></div>)}</div> : <div className="empty"><b>Your intelligence radar is ready.</b><span>No scored accounts yet. Signals will appear here as monitored companies are processed.</span></div>}</div>
-      <div className="panel"><h2>Recruitment pipeline</h2><div className="panel-sub">{m.candidates || 0} candidates currently isolated to this workspace.</div>{pipeline.length ? <div className="bars">{pipeline.map((p) => <div className="barline" key={p.stage}><span>{p.stage}</span><div className="bar"><i style={{ width: `${Math.max(6, (Number(p.n) || 0) / max * 100)}%` }} /></div><b>{p.n}</b></div>)}</div> : <div className="empty"><b>Pipeline ready</b><span>Candidate operations will plug into this shell without changing navigation or tenancy.</span></div>}</div>
-    </div>
+    {(signals.length > 0 || pipeline.length > 0) ? <div className="panels premium-panels">
+      {signals.length > 0 ? <div className="panel"><div className="panel-title-row"><div><h2>Highest-priority accounts</h2><div className="panel-sub">Only real scored intelligence appears here.</div></div><span className="panel-badge">Live intelligence</span></div><div className="table"><div className="tr head"><div>Company</div><div>Heat</div><div>Fit</div><div>Recommendation</div></div>{signals.map((s, i) => <div className="tr" key={i}><div><b>{s.name}</b><div className="row-sub">{s.why_now_summary}</div></div><div className="heat">{s.heat_score}</div><div>{s.fit_score ?? '—'}%</div><div><span className="pill">{s.recommendation}</span></div></div>)}</div></div> : null}
+      {pipeline.length > 0 ? <div className="panel"><h2>Recruitment pipeline</h2><div className="panel-sub">Actual active applications by persisted stage.</div><div className="bars">{pipeline.map((p) => <div className="barline" key={p.stage}><span>{p.stage}</span><div className="bar"><i style={{ width: `${Math.max(6, (Number(p.n) || 0) / max * 100)}%` }} /></div><b>{p.n}</b></div>)}</div></div> : null}
+    </div> : null}
   </AppShell>;
 }
