@@ -21,6 +21,6 @@ const api=fs.readFileSync('app/api/crm/route.js','utf8');
 if(!api.includes('sameOrigin'))throw new Error('CRM mutation route missing same-origin guard');
 const lib=fs.readFileSync('lib/crm.js','utf8');
 if(lib.includes('p_agency_id'))throw new Error('CRM wrapper must not send p_agency_id; workspace must come from verified session');
-const portalRoutes=['app/api/public/client-portal/route.js','app/api/public/vendor-portal/submit/route.js'];
+const portalRoutes=['app/api/public/client-portal/feedback/route.js','app/api/public/vendor-portal/submit/route.js'];
 for(const path of portalRoutes){const source=fs.readFileSync(path,'utf8');if(!source.includes('sameOrigin'))throw new Error(`${path} missing same-origin mutation guard`)}
 console.log(`Step 5 security checks passed (${assertions.length+2+portalRoutes.length} assertions).`);
