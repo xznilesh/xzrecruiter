@@ -17,6 +17,7 @@ jobs:
       - run: npm run test:step2
       - run: npm run test:step3
       - run: npm run test:step4
+      - run: npm run test:step4:closeout
       - run: npm run build
         env:
           DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/postgres
