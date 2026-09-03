@@ -16,7 +16,10 @@ alter table public.offers drop constraint if exists offers_status_check;
 alter table public.offers add constraint offers_status_check
   check (status in ('DRAFT','PENDING_APPROVAL','APPROVED','SENT','VIEWED','ACCEPTED','DECLINED','EXPIRED','WITHDRAWN'));
 
--- Preserve the existing interview lifecycle and explicit no-show state.
+-- Expanded interview types and lifecycle while preserving legacy CLIENT interviews.
+alter table public.interviews drop constraint if exists interviews_interview_type_check;
+alter table public.interviews add constraint interviews_interview_type_check
+  check (interview_type in ('CLIENT','PHONE','VIDEO','ONSITE','TECHNICAL','HIRING_MANAGER','PANEL','FINAL','CUSTOM'));
 alter table public.interviews drop constraint if exists interviews_status_check;
 alter table public.interviews add constraint interviews_status_check
   check (status in ('SCHEDULED','COMPLETED','CANCELLED','NO_SHOW','RESCHEDULED'));
