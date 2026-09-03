@@ -15,7 +15,11 @@
     "test:step4:stage-guard": "node scripts/step4-stage-guard-tests.mjs",
     "test:step4:public-apply": "node scripts/step4-public-apply-tests.mjs",
     "test:step4:candidate360": "node scripts/step4-candidate360-tests.mjs",
-    "test:step4:job360": "node scripts/step4-job360-tests.mjs"
+    "test:step4:job360": "node scripts/step4-job360-tests.mjs",
+    "test:step5": "node scripts/step5-tests.mjs",
+    "test:step5:security": "node scripts/step5-security-tests.mjs",
+    "test:step5:portals": "node scripts/step5-portals-tests.mjs",
+    "test:step5:performance": "node scripts/step5-performance-guard.mjs"
   },
   "dependencies": {
     "mammoth": "1.9.1",
