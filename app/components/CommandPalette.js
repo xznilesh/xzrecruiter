@@ -11,8 +11,17 @@ export const commandCatalog = [
   { id: 'interviews', label: 'Open Interviews', keywords: 'interview schedule calendar', href: '/interviews', group: 'Recruitment', enabled: true },
   { id: 'offers', label: 'Open Offers', keywords: 'offer compensation salary', href: '/offers', group: 'Recruitment', enabled: true },
   { id: 'placements', label: 'Open Placements', keywords: 'placement hire fee revenue', href: '/placements', group: 'Recruitment', enabled: true },
+  { id: 'clients', label: 'Open Clients & Accounts', keywords: 'client account prospect crm business', href: '/clients', group: 'Business', enabled: true },
+  { id: 'contacts', label: 'Open Contacts', keywords: 'decision maker hiring manager contact people crm', href: '/contacts', group: 'Business', enabled: true },
+  { id: 'opportunities', label: 'Open Opportunities', keywords: 'opportunity deal business revenue pipeline crm', href: '/opportunities', group: 'Business', enabled: true },
+  { id: 'business-pipeline', label: 'Open Business Pipeline', keywords: 'bd sales target lead client placement revenue', href: '/business/pipeline', group: 'Business', enabled: true },
+  { id: 'tasks', label: 'Open Tasks', keywords: 'task follow up action due reminder', href: '/tasks', group: 'Productivity', enabled: true },
   { id: 'create-candidate', label: 'Create candidate', keywords: 'new candidate quick create', href: '/candidates?action=create', group: 'Quick create', enabled: true },
   { id: 'create-job', label: 'Create job', keywords: 'new job quick create', href: '/jobs?action=create', group: 'Quick create', enabled: true },
+  { id: 'create-client', label: 'Create client or prospect account', keywords: 'new client account prospect crm', href: '/clients?action=create', group: 'Quick create', enabled: true },
+  { id: 'create-contact', label: 'Create contact', keywords: 'new decision maker hiring manager crm', href: '/contacts?action=create', group: 'Quick create', enabled: true },
+  { id: 'create-opportunity', label: 'Create opportunity', keywords: 'new deal business opportunity revenue', href: '/opportunities?action=create', group: 'Quick create', enabled: true },
+  { id: 'create-task', label: 'Create follow-up task', keywords: 'task action reminder follow up', href: '/tasks?action=create', group: 'Quick create', enabled: true },
   { id: 'schedule-interview', label: 'Schedule interview', keywords: 'calendar event interview', href: '/interviews?action=create', group: 'Quick create', enabled: true },
   { id: 'agency-setup', label: 'Open agency setup', keywords: 'onboarding quick setup advanced setup agency profile', href: '/onboarding?edit=1', group: 'Configure', enabled: true },
   { id: 'settings-center', label: 'Open Configuration Center', keywords: 'settings company size industry pipeline territory custom fields views', href: '/settings', group: 'Configure', enabled: true },
@@ -21,8 +30,7 @@ export const commandCatalog = [
   { id: 'recruitment-pipeline', label: 'Configure recruitment pipelines', keywords: 'pipeline stages screening offer placed workflow', href: '/onboarding?section=pipelines&edit=1', group: 'Configure', enabled: true },
   { id: 'company-icp', label: 'Configure Company ICP', keywords: 'company size funding target account growth', href: '/onboarding?section=icp&edit=1', group: 'Configure', enabled: true },
   { id: 'search-company', label: 'Search company intelligence', keywords: 'company hiring radar signal', group: 'Intelligence', enabled: false },
-  { id: 'matches', label: 'Open Candidate Intelligence Matches', keywords: 'match fit candidate job', group: 'Intelligence', enabled: false },
-  { id: 'create-client', label: 'Create client', keywords: 'new client crm', group: 'Business', enabled: false }
+  { id: 'matches', label: 'Open Candidate Intelligence Matches', keywords: 'match fit candidate job', group: 'Intelligence', enabled: false }
 ];
 
 const RECENTS_KEY = 'xz:recent-commands';
