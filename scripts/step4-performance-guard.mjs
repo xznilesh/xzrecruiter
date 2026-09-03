@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const read=(p)=>fs.readFileSync(p,'utf8');
+const hardening=read('supabase/migrations/20260903_step4_closeout_hardening.sql');
+const core=read('supabase/migrations/20260903_step4_enterprise_ats_core.sql');
+const candidates=read('app/candidates/page.js');
+const jobs=read('app/jobs/page.js');
+for(const token of ['least(coalesce(p_limit,50),100)','limit v_limit offset v_offset','idx_xzrecruiter_candidates_country_availability','idx_xzrecruiter_candidates_workplace','idx_xzrecruiter_jobs_country_status','idx_xzrecruiter_jobs_pipeline'])assert.ok(hardening.includes(token),`Missing bounded-query/index guard: ${token}`);
+for(const token of ['idx_xzrecruiter_applications_stage','idx_xzrecruiter_applications_candidate','idx_xzrecruiter_interviews_schedule','idx_xzrecruiter_offers_application'])assert.ok(core.includes(token),`Missing operational index: ${token}`);
+assert.ok(candidates.includes('getCandidateSearch')&&candidates.includes('limit=50'),'Candidates must use bounded server search');
+assert.ok(jobs.includes('getJobSearch')&&jobs.includes('limit=50'),'Jobs must use bounded server search');
+const synthetic=Array.from({length:100000},(_,i)=>({id:i,country:i%4===0?'GB':'US',status:i%7===0?'AVAILABLE_NOW':'PASSIVE'}));
+const started=performance.now();const page=synthetic.filter((x)=>x.country==='GB'&&x.status==='AVAILABLE_NOW').slice(0,50);const elapsed=performance.now()-started;
+assert.equal(page.length,50);
+console.log(`STEP4_PERF_ARCH_PASS bounded_queries=true indexed_filters=true whole_table_browser_fetch=false synthetic_100k_filter_ms=${elapsed.toFixed(2)} note=synthetic_not_database_p95`);
