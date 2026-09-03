@@ -1,22 +1,28 @@
-# XZRecruiter
+# XZ Recruiter
 
-Production XZRecruiter hiring-intelligence and recruiter operating workspace.
+XZRecruiter is a global recruitment intelligence and agency operating system.
 
-## Runtime architecture
-- Next.js 16.3.3 on Vercel
-- Supabase PostgreSQL
-- Browser-facing tables remain protected by RLS
-- App access uses narrowly scoped `SECURITY DEFINER` RPCs and per-user opaque HTTP-only sessions
-- Only a Supabase publishable key is used by the web runtime; no database password or service-role key is required on Vercel
+## Current engineering state
 
-## Product surface
-- Premium public landing page
-- Agency signup/login
-- Secure 30-day sessions with bcrypt password hashing inside PostgreSQL
-- Today’s hiring radar and explainable Hiring Heat
-- Company/job metrics and recruitment pipeline overview
-- Production readiness endpoint at `/api/health/ready`
+- Step 1: security/authentication/branding foundation
+- Step 2: global localization, IANA timezone and product shell foundation
+- Step 3: agency onboarding and recruitment configuration
+- Step 4: global enterprise ATS source closeout on `step4-global-enterprise-ats`
 
-## Production
-- Primary URL: https://xzrecruiter.vercel.app
-- Readiness: `/api/health/ready`
+Step 4 includes Candidate 360, private PDF/DOCX/TXT resume ingestion with confidence review, duplicate merge, talent pools, advanced server-side search/saved views, candidate and job bulk operations, configurable pipeline board/table flows, screening, client submissions, global interviews and scorecards, offer approvals/version history, placements, public apply, and an editable candidate portal with private resume refresh.
+
+Production activation is intentionally separate: Step-4 SQL migrations, private storage secrets/bucket, Vercel deployment, live tenant-isolation checks, real-dataset p95 measurements and end-to-end production certification must be completed before calling the live environment Step-4 certified.
+
+## Verification
+
+```bash
+npm install
+npm run lint
+npm run test:step2
+npm run test:step3
+npm run test:step4
+npm run test:step4:closeout
+npm run build
+```
+
+The closeout suite is source/architecture verification; it does not claim production latency or competitor benchmark results.
