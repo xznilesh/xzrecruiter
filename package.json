@@ -12,7 +12,8 @@
     "test:step4": "node scripts/step4-tests.mjs",
     "test:step4:closeout": "node scripts/step4-closeout-tests.mjs",
     "test:step4:performance": "node scripts/step4-performance-guard.mjs",
-    "test:step4:stage-guard": "node scripts/step4-stage-guard-tests.mjs"
+    "test:step4:stage-guard": "node scripts/step4-stage-guard-tests.mjs",
+    "test:step4:public-apply": "node scripts/step4-public-apply-tests.mjs"
   },
   "dependencies": {
     "mammoth": "1.9.1",
