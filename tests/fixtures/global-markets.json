@@ -1,0 +1,16 @@
+[
+  {"id":"india","country":"IN","label":"India","locale":"en-IN","currency":"INR","timezone":"Asia/Kolkata","language":"en"},
+  {"id":"us-new-york","country":"US","label":"USA New York","locale":"en-US","currency":"USD","timezone":"America/New_York","language":"en"},
+  {"id":"us-california","country":"US","label":"USA California","locale":"en-US","currency":"USD","timezone":"America/Los_Angeles","language":"en"},
+  {"id":"canada","country":"CA","label":"Canada","locale":"en-CA","currency":"CAD","timezone":"America/Toronto","language":"en"},
+  {"id":"uk","country":"GB","label":"United Kingdom","locale":"en-GB","currency":"GBP","timezone":"Europe/London","language":"en"},
+  {"id":"germany","country":"DE","label":"Germany","locale":"de-DE","currency":"EUR","timezone":"Europe/Berlin","language":"de"},
+  {"id":"france","country":"FR","label":"France","locale":"fr-FR","currency":"EUR","timezone":"Europe/Paris","language":"fr"},
+  {"id":"netherlands","country":"NL","label":"Netherlands","locale":"nl-NL","currency":"EUR","timezone":"Europe/Amsterdam","language":"nl"},
+  {"id":"uae","country":"AE","label":"UAE","locale":"en-AE","currency":"AED","timezone":"Asia/Dubai","language":"en"},
+  {"id":"saudi","country":"SA","label":"Saudi Arabia","locale":"ar-SA","currency":"SAR","timezone":"Asia/Riyadh","language":"ar"},
+  {"id":"singapore","country":"SG","label":"Singapore","locale":"en-SG","currency":"SGD","timezone":"Asia/Singapore","language":"en"},
+  {"id":"australia-sydney","country":"AU","label":"Australia Sydney","locale":"en-AU","currency":"AUD","timezone":"Australia/Sydney","language":"en"},
+  {"id":"australia-perth","country":"AU","label":"Australia Perth","locale":"en-AU","currency":"AUD","timezone":"Australia/Perth","language":"en"},
+  {"id":"new-zealand","country":"NZ","label":"New Zealand","locale":"en-NZ","currency":"NZD","timezone":"Pacific/Auckland","language":"en"}
+]

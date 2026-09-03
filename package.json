@@ -6,10 +6,25 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "node scripts/verify.mjs"
+    "lint": "node scripts/verify.mjs",
+    "test:step2": "node scripts/step2-tests.mjs",
+    "test:step3": "node scripts/step3-tests.mjs",
+    "test:step4": "node scripts/step4-tests.mjs",
+    "test:step4:closeout": "node scripts/step4-closeout-tests.mjs",
+    "test:step4:performance": "node scripts/step4-performance-guard.mjs",
+    "test:step4:stage-guard": "node scripts/step4-stage-guard-tests.mjs",
+    "test:step4:public-apply": "node scripts/step4-public-apply-tests.mjs",
+    "test:step4:candidate360": "node scripts/step4-candidate360-tests.mjs",
+    "test:step4:job360": "node scripts/step4-job360-tests.mjs",
+    "test:step5": "node scripts/step5-tests.mjs",
+    "test:step5:security": "node scripts/step5-security-tests.mjs",
+    "test:step5:portals": "node scripts/step5-portals-tests.mjs",
+    "test:step5:performance": "node scripts/step5-performance-guard.mjs"
   },
   "dependencies": {
+    "mammoth": "1.9.1",
     "next": "16.3.3",
+    "pdf-parse": "1.1.1",
     "react": "19.2.0",
     "react-dom": "19.2.0"
   },

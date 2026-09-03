@@ -1,0 +1,17 @@
+import fs from 'node:fs';
+import { performance } from 'node:perf_hooks';
+const rpc=fs.readFileSync('supabase/migrations/20260903_step5_recruitment_crm_rpcs.sql','utf8');
+const core=fs.readFileSync('supabase/migrations/20260903_step5_recruitment_crm_core.sql','utf8');
+const workspace=fs.readFileSync('app/components/CrmWorkspace.js','utf8');
+const requiredIndexes=['idx_xzr_clients_search','idx_xzr_clients_owner','idx_xzr_clients_country','idx_xzr_contacts_search','idx_xzr_contacts_email','idx_xzr_opportunities_stage','idx_xzr_opportunities_owner','idx_xzr_activities_client','idx_xzr_tasks_due','idx_xzr_contracts_client'];
+for(const index of requiredIndexes)if(!core.includes(index))throw new Error(`Missing CRM operational index ${index}`);
+for(const needle of ['least(greatest(coalesce(p_limit,50),1),100)','limit v_limit offset v_offset'])if(!rpc.toLowerCase().includes(needle.toLowerCase()))throw new Error(`CRM query boundary missing: ${needle}`);
+if(/getCrmSearch\([^\n]+100000/i.test(workspace))throw new Error('CRM UI must not request whole datasets');
+if(!workspace.includes('page')||!workspace.includes('totalPages'))throw new Error('CRM workspace pagination missing');
+const rows=Array.from({length:100000},(_,i)=>({id:i,status:i%7===0?'OPEN':'ACTIVE',value:(i*37)%100000,owner:i%73}));
+const start=performance.now();
+const result=rows.filter(r=>r.status==='OPEN'&&r.owner===7).sort((a,b)=>b.value-a.value).slice(0,50);
+const elapsed=performance.now()-start;
+if(result.length>50)throw new Error('Synthetic bounded result failed');
+if(elapsed>1500)throw new Error(`Synthetic 100k guard unexpectedly slow: ${elapsed.toFixed(1)}ms`);
+console.log(`Step 5 performance architecture guard passed: ${requiredIndexes.length} indexes, bounded RPC pagination, synthetic 100k in-memory guard ${elapsed.toFixed(1)}ms. This is not a production DB p95 benchmark.`);
