@@ -2,15 +2,32 @@ import Image from 'next/image';
 import Link from 'next/link';
 
 export default function Brand({ href = '/', compact = false }) {
-  const image = <Image
-    className="brand-logo"
-    src="/xzrecruiter-logo.svg"
-    alt="XZ Recruiter"
-    width={compact ? 170 : 196}
-    height={compact ? 55 : 63}
-    priority
-    unoptimized
-  />;
+  const markWidth = compact ? 58 : 68;
+  const markHeight = compact ? 30 : 35;
 
-  return href ? <Link className="brand" href={href} aria-label="XZ Recruiter home">{image}</Link> : <div className="brand" aria-label="XZ Recruiter">{image}</div>;
+  const brand = (
+    <>
+      <Image
+        className="brand-logo"
+        src="/xz-monogram.svg"
+        alt=""
+        aria-hidden="true"
+        width={markWidth}
+        height={markHeight}
+        priority
+        unoptimized
+        style={{ width: markWidth, height: markHeight, objectFit: 'contain', flex: '0 0 auto' }}
+      />
+      <span
+        className="brandname"
+        style={{ color: '#f7f8fb', fontSize: compact ? 20 : 22, fontWeight: 800, lineHeight: 1 }}
+      >
+        Recruiter
+      </span>
+    </>
+  );
+
+  return href
+    ? <Link className="brand" href={href} aria-label="XZ Recruiter home">{brand}</Link>
+    : <div className="brand" aria-label="XZ Recruiter">{brand}</div>;
 }
