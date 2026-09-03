@@ -22,6 +22,7 @@ jobs:
       - run: npm run test:step4:stage-guard
       - run: npm run test:step4:public-apply
       - run: npm run test:step4:candidate360
+      - run: npm run test:step4:job360
       - run: npm run build
         env:
           DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/postgres
