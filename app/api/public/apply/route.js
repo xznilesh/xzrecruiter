@@ -11,7 +11,7 @@ const ALLOWED=new Set(['application/pdf','application/vnd.openxmlformats-officed
 const MAX_BYTES=8*1024*1024;
 
 function sameOrigin(req){const origin=req.headers.get('origin');return !origin||origin===req.nextUrl.origin;}
-function statusFor(error){if(error==='not_found')return 404;if(error==='already_applied')return 409;if(error==='consent_required')return 422;if(error==='invalid_country'||error==='invalid_timezone'||error==='name_email_required')return 400;return 400;}
+function statusFor(error){if(error==='not_found')return 404;if(error==='already_applied')return 409;if(error==='consent_required'||error==='screening_required')return 422;if(error==='invalid_country'||error==='invalid_timezone'||error==='name_email_required'||error==='invalid_screening_answers')return 400;return 400;}
 function safeResponse(result,extra={}){return {ok:true,applicationId:result.application_id,...extra};}
 
 async function parseInput(req){
