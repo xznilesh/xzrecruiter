@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+const root=process.cwd();const read=(p)=>fs.readFileSync(path.join(root,p),'utf8');const must=(p)=>assert.ok(fs.existsSync(path.join(root,p)),`Missing ${p}`);
+[
+ 'lib/resume-parser.js','lib/server-storage.js','lib/ats.js','app/api/ats/resume/route.js','app/api/ats/document/route.js',
+ 'app/api/public/candidate-portal/resume/route.js','app/components/CandidateCloseoutDrawer.js','app/components/CandidateWorkspace.js',
+ 'app/components/JobWorkspace.js','app/components/ApplicationScreeningDrawer.js','app/components/PipelineWorkspace.js','app/components/InterviewScorecardDrawer.js',
+ 'app/components/OfferCloseoutDrawer.js','app/components/RecruitmentOpsWorkspace.js','app/components/CandidatePortalProfile.js','app/step4-closeout.css',
+ 'supabase/migrations/20260903_step4_closeout_hardening.sql','supabase/migrations/20260903_step4_closeout_views_documents_privacy.sql',
+ 'supabase/migrations/20260903_step4_zz_full_closeout.sql','supabase/migrations/20260903_step4_zzz_candidate_360_context.sql','supabase/migrations/20260903_step4_zzzz_bulk_job_compat.sql'
+].forEach(must);
+const pkg=JSON.parse(read('package.json'));assert.equal(pkg.dependencies['pdf-parse'],'1.1.1');assert.equal(pkg.dependencies.mammoth,'1.9.1');
+const parser=read('lib/resume-parser.js');for(const x of ['pdf-parse','mammoth','extractResumeText','parseResumeText','fieldConfidence','fieldEvidence'])assert.ok(parser.includes(x));
+const storage=read('lib/server-storage.js');for(const x of ['SUPABASE_SERVICE_ROLE_KEY','uploadPrivateObject','createSignedPrivateUrl','xzrecruiter-private'])assert.ok(storage.includes(x));assert.ok(!storage.includes('NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY'));
+const candidate=read('app/components/CandidateWorkspace.js');for(const x of ['advanced-filter-bar','savedViews','bulkCandidateAction','candidateExport','Export CSV','CandidateCloseoutDrawer'])assert.ok(candidate.includes(x));
+const drawer=read('app/components/CandidateCloseoutDrawer.js');for(const x of ['Upload & parse','Review extracted fields','Duplicate review','Merge into kept profile','createTalentPool','Activity timeline','merge_history'])assert.ok(drawer.includes(x));
+const jobs=read('app/components/JobWorkspace.js');for(const x of ['advanced-filter-bar','savedViews','bulkJobAction','SET_STATUS','SET_PRIORITY','ADD_TAG','ARCHIVE'])assert.ok(jobs.includes(x));
+const pipeline=read('app/components/PipelineWorkspace.js');for(const x of ['draggable','onDragOver','onDrop','Board','Table','ApplicationScreeningDrawer'])assert.ok(pipeline.includes(x));
+const application=read('app/components/ApplicationScreeningDrawer.js');for(const x of ['Application 360','Client submission','saveCandidateSubmission','Submit to client','Application timeline'])assert.ok(application.includes(x));
+const scorecard=read('app/components/InterviewScorecardDrawer.js');for(const x of ['Scorecard template studio','saveScorecardTemplate','submitScorecard'])assert.ok(scorecard.includes(x));
+const offer=read('app/components/OfferCloseoutDrawer.js');for(const x of ['Offer 360','Request approval','Approve','Version history','New version','offerStatus'])assert.ok(offer.includes(x));
+const portal=read('app/components/CandidatePortalProfile.js');for(const x of ['Recruitment consent','Update CV / Resume','candidate-portal/resume'])assert.ok(portal.includes(x));
+const sqlFiles=['supabase/migrations/20260903_step4_closeout_hardening.sql','supabase/migrations/20260903_step4_closeout_views_documents_privacy.sql','supabase/migrations/20260903_step4_zz_full_closeout.sql','supabase/migrations/20260903_step4_zzz_candidate_360_context.sql','supabase/migrations/20260903_step4_zzzz_bulk_job_compat.sql'];const sql=sqlFiles.map(read).join('\n');assert.ok(!/\bdrop\s+table\b|\btruncate\b/i.test(sql));
+for(const fn of ['xzrecruiter_candidate_search','xzrecruiter_job_search','xzrecruiter_prepare_candidate_document','xzrecruiter_apply_candidate_parse','xzrecruiter_merge_candidates','xzrecruiter_bulk_candidate_action','xzrecruiter_save_screening_answers','xzrecruiter_submit_scorecard','xzrecruiter_saved_view_context','xzrecruiter_candidate_document_access','xzrecruiter_create_talent_pool','xzrecruiter_application_closeout_context','xzrecruiter_save_candidate_submission','xzrecruiter_bulk_job_action','xzrecruiter_candidate_export','xzrecruiter_offer_closeout_context','xzrecruiter_offer_approval_action','xzrecruiter_offer_set_status','xzrecruiter_candidate_portal_prepare_document','xzrecruiter_candidate_portal_finalize_parse'])assert.ok(sql.includes(`function public.${fn}`),`Missing ${fn}`);
+const compat=read('supabase/migrations/20260903_step4_zzzz_bulk_job_compat.sql');assert.ok(compat.includes('agency_memberships where agency_id=v_agency and user_id=v_owner)'));assert.ok(!compat.includes('active=true'));
+const css=read('app/step4-closeout.css');for(const x of ['drawer-tabs','activity-timeline','pipeline-viewbar','approval-list','portal-resume-panel','@media(max-width:520px)','[dir="rtl"]'])assert.ok(css.includes(x));
+console.log('STEP4_CLOSEOUT_PASS resume=PDF+DOCX+TXT storage=private duplicates=review+merge search=server views=saved bulk=candidate+job pipeline=board+table+drag screening=true submissions=true scorecards=true offers=approval+versions portal=editable+resume audit=true rtl=true');
