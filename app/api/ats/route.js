@@ -8,9 +8,10 @@ function sameOrigin(req) {
 
 function statusFor(error) {
   if (error === 'unauthorized') return 401;
-  if (error === 'forbidden') return 403;
+  if (error === 'forbidden' || error === 'stage_role_forbidden') return 403;
   if (error === 'not_found' || error?.endsWith?.('_not_found')) return 404;
   if (error === 'possible_duplicate' || error === 'application_exists' || error === 'placement_exists' || error === 'already_applied') return 409;
+  if (error === 'stage_requirements_missing' || error === 'rejection_reason_required' || error === 'withdrawal_reason_required') return 422;
   return 400;
 }
 
