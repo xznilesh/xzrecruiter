@@ -50,9 +50,11 @@ export default function CrmCustomFieldsPanel({entityType,entityId,definitions=[]
   },[entityId,fields,values]);
   if(!fields.length) return null;
   async function save(){
+    const missing=fields.find(field=>field.required&&(form[field.id]===null||form[field.id]===undefined||form[field.id]===''||(Array.isArray(form[field.id])&&!form[field.id].length)));
+    if(missing){setState('error');setMessage(`${missing.label} is required`);return;}
     setState('saving');setMessage('');
     try{
-      const payload=fields.map(field=>({fieldDefinitionId:field.id,value:form[field.id]??null}));
+      const payload=fields.map(field=>({fieldId:field.id,value:form[field.id]??null}));
       const result=await crm('saveCustomValues',{entityType,entityId,values:payload});
       setState('saved');setMessage('Custom fields saved');onSaved?.(result);
     }catch(e){setState('error');setMessage(e.message||'Could not save custom fields')}
