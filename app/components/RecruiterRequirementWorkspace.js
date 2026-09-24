@@ -173,7 +173,7 @@ export default function RecruiterRequirementWorkspace({initialContext,jobId}){
      <div className="rx-work-list">{filteredQueue.length?filteredQueue.map(row=><article key={row.application_id} className={row.blocked?'blocked':''}>
        <div><b>{row.full_name}</b><span>{[row.current_title,row.current_company].filter(Boolean).join(' · ')||'Candidate'}</span><small>{row.source_type||'UNKNOWN SOURCE'}{row.sourced_at?' · sourced '+fmtDue(row.sourced_at,ctx.timezone):''}</small></div>
        <div className="rx-work-state"><span>{row.queue_group.replaceAll('_',' ')}</span><small>{row.canonical_state}</small></div>
-       <div className="rx-row-actions"><button onClick={()=>taskFor(row,'FOLLOW_UP')}>Follow-up</button><button onClick={()=>taskFor(row,'COLLECT_RESUME')}>Resume</button><a href={'/candidates/'+row.candidate_id}>Open candidate</a></div>
+       <div className="rx-row-actions"><button onClick={()=>taskFor(row,'FOLLOW_UP')}>Follow-up</button><button onClick={()=>taskFor(row,'COLLECT_RESUME')}>Resume</button><button onClick={()=>taskFor(row,'SCREENING_DUE')}>Screening</button></div>
      </article>):<div className="rx-empty compact">No candidates in this queue. Source/add a candidate to begin execution.</div>}</div>
    </section>
 
