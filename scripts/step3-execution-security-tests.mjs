@@ -16,6 +16,9 @@ assert.ok(sql.includes('candidate_access_forbidden'));
 assert.ok(sql.includes('recruiter_self_assignment_only'));
 assert.ok(sql.includes('assignee_not_recruiter'));
 assert.ok(sql.includes('protected_requirement'));
+assert.ok(sql.includes('reusable_without_manager'),'privacy-safe internal talent discovery flag missing');
+assert.ok(sql.includes("then c.email else null end email"),'unrelated candidate email should be masked');
+assert.ok(sql.includes("then c.phone else null end phone"),'unrelated candidate phone should be masked');
 
 for(const name of [
   'xzrecruiter_ats_context_step3_legacy','xzrecruiter_candidate_search_step3_legacy','xzrecruiter_job_search_step3_legacy',
