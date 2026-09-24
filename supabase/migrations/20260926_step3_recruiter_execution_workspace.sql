@@ -269,7 +269,7 @@ declare
   v_agency uuid;v_user uuid;v_membership_role text;v_business_role text;v_timezone text;v_local_date date;
   v_start timestamptz;v_end timestamptz;v_limit integer:=greatest(1,least(coalesce(p_limit,50),100));
   v_requirements jsonb:='[]'::jsonb;v_tasks jsonb:='[]'::jsonb;v_interviews jsonb:='[]'::jsonb;
-  v_target integer:=0;v_done integer:=0;v_due integer:=0;v_screening integer:=0;v_interview_actions integer:=0;
+  v_target integer:=0;v_done integer:=0;v_due integer:=0;v_screening integer:=0;v_interview_actions integer:=0;v_attention integer:=0;
 begin
   select agency_id,user_id,role into v_agency,v_user,v_membership_role
   from private.xzrecruiter_session_context(p_token);
@@ -311,6 +311,13 @@ begin
           and t.archived_at is null and t.status in ('OPEN','IN_PROGRESS')
           and t.due_at is not null and t.due_at<now()
       ),0)::integer overdue_tasks,
+      coalesce((
+        select count(*)
+        from public.crm_tasks t
+        where t.agency_id=v_agency and t.job_id=j.id and t.assigned_user_id=ra.recruiter_user_id
+          and t.archived_at is null and t.status in ('OPEN','IN_PROGRESS')
+          and t.due_at is not null and t.due_at<v_end
+      ),0)::integer due_tasks_today,
       coalesce((
         select count(*)
         from public.applications a
@@ -362,13 +369,14 @@ begin
   select coalesce(jsonb_agg(to_jsonb(x) order by x.priority_score desc,x.remaining_target desc,x.title asc),'[]'::jsonb),
          coalesce(sum(x.daily_target),0)::integer,
          coalesce(sum(x.valid_submissions_today),0)::integer,
-         coalesce(sum(x.overdue_tasks),0)::integer,
-         coalesce(sum(x.screening_pending),0)::integer
-  into v_requirements,v_target,v_done,v_due,v_screening
+         coalesce(sum(x.due_tasks_today),0)::integer,
+         coalesce(sum(x.screening_pending),0)::integer,
+         coalesce(sum(case when x.remaining_target>0 or x.due_tasks_today>0 or x.screening_pending>0 or x.blocker_count>0 or x.status='ON_HOLD' then 1 else 0 end),0)::integer
+  into v_requirements,v_target,v_done,v_due,v_screening,v_attention
   from (
     select id assignment_id,job_id,recruiter_user_id,title,account_name,priority,openings,target_fill_date,status,
       requirement_state,daily_submission_target requirement_daily_target,daily_target assigned_daily_target,
-      valid_submissions_today,remaining_target,overdue_tasks,screening_pending,blocker_count,age_hours,priority_score,
+      valid_submissions_today,remaining_target,overdue_tasks,due_tasks_today,screening_pending,blocker_count,age_hours,priority_score,
       priority_context,manager_instructions,brief_summary,must_haves,pipeline_candidates
     from scored
     order by priority_score desc,remaining_target desc,title asc
@@ -380,7 +388,8 @@ begin
   from (
     select t.id,t.job_id,t.candidate_id,t.application_id,t.task_type,t.title,t.description,t.status,t.priority,
       t.due_at,t.created_at,j.title job_title,c.full_name candidate_name,
-      (t.due_at is not null and t.due_at<now() and t.status in ('OPEN','IN_PROGRESS')) overdue
+      (t.due_at is not null and t.due_at<now() and t.status in ('OPEN','IN_PROGRESS')) overdue,
+      (t.due_at is not null and t.due_at<v_end and t.status in ('OPEN','IN_PROGRESS')) due_today
     from public.crm_tasks t
     left join public.recruitment_jobs j on j.id=t.job_id and j.agency_id=v_agency
     left join public.candidates c on c.id=t.candidate_id and c.agency_id=v_agency
@@ -422,7 +431,7 @@ begin
     'ok',true,'business_role',v_business_role,'timezone',v_timezone,'business_date',v_local_date,
     'today',jsonb_build_object(
       'daily_target',v_target,'valid_submissions_completed',v_done,'remaining_target',greatest(0,v_target-v_done),
-      'jobs_requiring_attention',jsonb_array_length(v_requirements),'due_followups',v_due,
+      'jobs_requiring_attention',v_attention,'due_followups',v_due,
       'screening_actions_due',v_screening,'interview_actions',coalesce(v_interview_actions,0)
     ),
     'requirements',v_requirements,'tasks',v_tasks,'interviews',v_interviews
@@ -557,7 +566,8 @@ begin
   from (
     select t.id,t.task_type,t.title,t.description,t.status,t.priority,t.due_at,t.assigned_user_id,t.candidate_id,
       t.application_id,t.created_at,t.completed_at,c.full_name candidate_name,
-      (t.due_at is not null and t.due_at<now() and t.status in ('OPEN','IN_PROGRESS')) overdue
+      (t.due_at is not null and t.due_at<now() and t.status in ('OPEN','IN_PROGRESS')) overdue,
+      (t.due_at is not null and t.due_at<v_end and t.status in ('OPEN','IN_PROGRESS')) due_today
     from public.crm_tasks t
     left join public.candidates c on c.id=t.candidate_id and c.agency_id=v_agency
     where t.agency_id=v_agency and t.job_id=p_job_id and t.archived_at is null
@@ -642,11 +652,30 @@ begin
   select coalesce(jsonb_agg(to_jsonb(x) order by x.updated_at desc),'[]'::jsonb)
   into v_rows
   from (
-    select c.id,c.full_name,c.email,c.phone,c.current_title,c.current_company,c.city,c.country_code,c.updated_at,
+    select c.id,c.full_name,
+      case when v_business_role<>'RECRUITER' or c.owner_user_id=v_user or exists(
+        select 1 from public.applications ax
+        join public.requirement_recruiter_assignments rax on rax.job_id=ax.job_id and rax.agency_id=v_agency
+        where ax.agency_id=v_agency and ax.candidate_id=c.id and ax.archived_at is null
+          and rax.recruiter_user_id=v_user and rax.assignment_status='ACTIVE'
+      ) then c.email else null end email,
+      case when v_business_role<>'RECRUITER' or c.owner_user_id=v_user or exists(
+        select 1 from public.applications ax
+        join public.requirement_recruiter_assignments rax on rax.job_id=ax.job_id and rax.agency_id=v_agency
+        where ax.agency_id=v_agency and ax.candidate_id=c.id and ax.archived_at is null
+          and rax.recruiter_user_id=v_user and rax.assignment_status='ACTIVE'
+      ) then c.phone else null end phone,
+      c.current_title,c.current_company,c.city,c.country_code,c.updated_at,
       exists(
         select 1 from public.applications a
         where a.agency_id=v_agency and a.candidate_id=c.id and a.job_id=p_job_id and a.archived_at is null
-      ) already_on_requirement
+      ) already_on_requirement,
+      (v_business_role<>'RECRUITER' or c.owner_user_id=v_user or exists(
+        select 1 from public.applications ax
+        join public.requirement_recruiter_assignments rax on rax.job_id=ax.job_id and rax.agency_id=v_agency
+        where ax.agency_id=v_agency and ax.candidate_id=c.id and ax.archived_at is null
+          and rax.recruiter_user_id=v_user and rax.assignment_status='ACTIVE'
+      )) reusable_without_manager
     from public.candidates c
     where c.agency_id=v_agency and c.archived_at is null and c.merged_into_candidate_id is null
       and (
@@ -655,17 +684,6 @@ begin
         or lower(coalesce(c.phone,'')) like '%'||v_q||'%'
         or lower(coalesce(c.current_title,'')) like '%'||v_q||'%'
         or lower(coalesce(c.current_company,'')) like '%'||v_q||'%'
-      )
-      and (
-        v_business_role<>'RECRUITER'
-        or c.owner_user_id=v_user
-        or exists(
-          select 1
-          from public.applications a
-          join public.requirement_recruiter_assignments ra on ra.job_id=a.job_id and ra.agency_id=v_agency
-          where a.agency_id=v_agency and a.candidate_id=c.id and a.archived_at is null
-            and ra.recruiter_user_id=v_user and ra.assignment_status='ACTIVE'
-        )
       )
     order by c.updated_at desc
     limit v_limit
