@@ -17,6 +17,8 @@ assert.equal(normalizeEmail(' USER@EXAMPLE.COM '),'user@example.com');
 assert.equal(normalizePhone('+91 99999-99999'),'+919999999999');
 assert.equal(normalizeLocation('Bengaluru,  India'),'bengaluru india');
 assert.equal(normalizeCertification('AWS®-SAA'),'aws saa');
+const missingNumeric=buildCandidateProfileSnapshot({candidate:{full_name:'Missing Experience'},resumeText:'No experience duration stated.'});
+assert.equal(missingNumeric.professional.totalExperienceYears.normalized,'','missing numeric experience must stay unknown rather than becoming zero');
 
 const exp=calculateExperienceYears([
   {startDate:'2020-01-01',endDate:'2022-01-01'},
