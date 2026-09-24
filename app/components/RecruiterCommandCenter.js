@@ -45,19 +45,19 @@ export default function RecruiterCommandCenter({initialContext}){
       <div className="rx-section-head"><div><span className="page-kicker">My priority requirements</span><h2>Work in this order</h2><p>Deterministic order: target gap → manager/client priority → deadline → ageing → work readiness.</p></div><span className="status neutral">{ctx.business_date} · {ctx.timezone}</span></div>
       <div className="rx-role-grid">{roles.length?roles.map((r)=>{
         const done=Number(r.valid_submissions_today||0);
-        const target=Number(r.assigned_daily_target||0);
+        const target=Number(r.daily_target??r.assigned_daily_target??0);
         const remaining=Number(r.remaining_target||0);
         const percent=progress(done,target);
-        const blockers=Number(r.blocker_count||0)+(r.status==='ON_HOLD'?1:0);
+        const blockers=Number(r.blocker_count||0)+((r.status||r.requirement_status)==='ON_HOLD'?1:0);
         return <article className="rx-role-card" key={String(r.assignment_id)+'-'+String(r.job_id)}>
-          <div className="rx-role-top"><div><span className={'rx-priority '+String(r.priority||'NORMAL').toLowerCase()}>{r.priority||'NORMAL'}</span><h3>{r.title}</h3><p>{r.account_name||'Account context unavailable'}</p></div><div className="rx-gap"><b>{remaining}</b><span>remaining</span></div></div>
+          <div className="rx-role-top"><div><span className={'rx-priority '+String(r.priority||'NORMAL').toLowerCase()}>{r.priority||'NORMAL'}</span><h3>{r.title}</h3><p>{r.account_name||r.client_name||'Account context unavailable'}</p></div><div className="rx-gap"><b>{remaining}</b><span>remaining</span></div></div>
           <p className="rx-brief">{r.brief_summary||'Approved Hiring Brief available in the requirement workspace.'}</p>
           <div className="rx-chips">{(Array.isArray(r.must_haves)?r.must_haves:[]).slice(0,4).map((x,i)=><span key={i}>{x}</span>)}</div>
           <div className="rx-progress-head"><span>{done}/{target} valid today</span><span>{percent}%</span></div>
           <div className="rx-progress"><i style={{width:String(percent)+'%'}}/></div>
           <div className="rx-role-stats"><div><span>Openings</span><b>{r.openings||1}</b></div><div><span>Pipeline</span><b>{r.pipeline_candidates||0}</b></div><div><span>Screening</span><b>{r.screening_pending||0}</b></div><div><span>Blockers</span><b>{blockers}</b></div></div>
           {r.manager_instructions?<div className="rx-manager-note"><b>Manager context</b><span>{r.manager_instructions}</span></div>:null}
-          <div className="rx-role-foot"><span>{fmtDate(r.target_fill_date)}</span><Link className="primary-action" href={'/recruiter/requirements/'+r.job_id}>Open role →</Link></div>
+          <div className="rx-role-foot"><span>{fmtDate(r.target_fill_date||r.deadline)}</span><Link className="primary-action" href={'/recruiter/requirements/'+r.job_id}>Open role →</Link></div>
         </article>
       }):<div className="rx-empty"><h3>No active recruiter assignments.</h3><p>An Account Manager or Recruitment Manager must assign an approved Step-2 requirement before it appears here.</p></div>}</div>
     </section>
