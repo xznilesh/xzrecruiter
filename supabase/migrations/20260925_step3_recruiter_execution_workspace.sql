@@ -252,6 +252,16 @@ begin
       ),0)::integer valid_today,
       coalesce((
         select count(*) from public.applications ap
+        where ap.agency_id=v_agency and ap.job_id=j.id and ap.owner_user_id=v_user and ap.archived_at is null
+      ),0)::integer pipeline_candidates,
+      coalesce((
+        select count(*) from public.applications ap
+        left join public.pipeline_stages ps on ps.id=ap.stage_id and ps.agency_id=v_agency
+        where ap.agency_id=v_agency and ap.job_id=j.id and ap.owner_user_id=v_user and ap.archived_at is null
+          and upper(coalesce(ps.code,ap.stage,''))='SCREENING'
+      ),0)::integer screening_pending,
+      coalesce((
+        select count(*) from public.applications ap
         left join public.pipeline_stages ps on ps.id=ap.stage_id and ps.agency_id=v_agency
         where ap.agency_id=v_agency and ap.job_id=j.id and ap.owner_user_id=v_user and ap.archived_at is null
           and upper(coalesce(ps.code,ap.stage,'')) in ('SCREENING','QUALIFIED','SHORTLISTED')
@@ -296,7 +306,8 @@ begin
       case when effective_daily_target=0 then 0 else least(100,round(valid_today*100.0/effective_daily_target)) end,
     'deadline',target_fill_date,'requirement_status',job_status,'assignment_status',assignment_status,
     'manager_instructions',manager_instructions,'blocker_reason',blocker_reason,
-    'blocker_owner_user_id',blocker_owner_user_id,'ready_candidates',ready_candidates,
+    'blocker_owner_user_id',blocker_owner_user_id,'pipeline_candidates',pipeline_candidates,
+    'screening_pending',screening_pending,'ready_candidates',ready_candidates,
     'overdue_tasks',overdue_tasks,'priority_score',priority_score,
     'brief_summary',coalesce(hiring_brief->>'roleSummary',''),
     'must_haves',coalesce(hiring_brief->'mustHaveCriteria','[]'::jsonb)
@@ -335,7 +346,7 @@ begin
   select coalesce(jsonb_agg(to_jsonb(x) order by x.scheduled_at),'[]'::jsonb)
   into v_interviews
   from (
-    select i.id,i.application_id,i.scheduled_at,i.timezone,i.status,c.full_name candidate_name,j.title job_title
+    select i.id,i.application_id,ap.job_id,i.scheduled_at,i.timezone,i.status,c.full_name candidate_name,j.title job_title
     from public.interviews i
     join public.applications ap on ap.id=i.application_id and ap.agency_id=v_agency
     join public.candidates c on c.id=ap.candidate_id and c.agency_id=v_agency
@@ -506,7 +517,10 @@ begin
         and (v_business_role<>'RECRUITER' or a.recruiter_user_id=v_user)
     ),'[]'::jsonb),
     'execution',jsonb_build_object(
-      'daily_target',v_target,'valid_submissions_today',v_valid,'remaining_target',greatest(v_target-v_valid,0),
+      'daily_target',v_target,
+      'requirement_daily_target',coalesce((v_job->>'submission_target_daily')::integer,0),
+      'requirement_total_target',coalesce((v_job->>'submission_target_total')::integer,0),
+      'valid_submissions_today',v_valid,'remaining_target',greatest(v_target-v_valid,0),
       'progress',case when v_target=0 then 0 else least(100,round(v_valid*100.0/v_target)) end
     ),
     'queue',v_queue,'tasks',v_tasks
