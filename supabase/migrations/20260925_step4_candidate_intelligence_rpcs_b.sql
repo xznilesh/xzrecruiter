@@ -95,13 +95,13 @@ begin
 
     insert into public.candidate_profile_versions(
       id,agency_id,candidate_id,document_id,parse_run_id,version_number,profile_status,profile_json,profile_hash,
-      source_fingerprint,parser_version,model_name,prompt_version,schema_version,input_hash,is_current,created_by_user_id
+      source_fingerprint,parser_version,model_name,prompt_version,schema_version,profile_schema_version,input_hash,is_current,created_by_user_id
     )
     select
       v_profile,v_agency,v_run.candidate_id,v_doc,v_run.parse_run_id,v_profile_version,v_profile_status,coalesce(p_profile_json,'{}'::jsonb),
       left(p_profile_hash,128),left(coalesce(p_source_fingerprint,v_run.input_hash),128),
       pr.parser_version,nullif(left(coalesce(p_ai_meta->>'model',''),120),''),
-      left(v_run.prompt_version,120),left(v_run.schema_version,120),left(v_run.input_hash,128),true,v_user
+      left(v_run.prompt_version,120),left(v_run.schema_version,120),'xz-candidate-profile-v2',left(v_run.input_hash,128),true,v_user
     from (select 1) one
     left join public.candidate_parse_runs pr on pr.id=v_run.parse_run_id and pr.agency_id=v_agency;
 
@@ -160,7 +160,7 @@ begin
 
   -- Explainable duplicate scan. Same-tenant only. Never auto-merges.
   v_email:=lower(coalesce(p_profile_json#>>'{identity,email,normalized}',''));
-  v_phone:=regexp_replace(coalesce(p_profile_json#>>'{identity,phone,normalized}',''),'[^0-9]','','g');
+  v_phone:=coalesce(p_profile_json#>>'{identity,phone,normalized}','');
   v_name:=lower(coalesce(p_profile_json#>>'{identity,name,normalized}',''));
   v_company:=lower(coalesce(p_profile_json#>>'{professional,currentCompany,normalized}',''));
   v_location:=lower(coalesce(p_profile_json#>>'{identity,location,normalized}',''));
@@ -193,7 +193,7 @@ begin
   from (
     select c.id,
       (v_email<>'' and lower(btrim(coalesce(c.email,'')))=v_email) exact_email,
-      (v_phone<>'' and regexp_replace(coalesce(c.phone,''),'[^0-9]','','g')=v_phone) exact_phone,
+      (v_phone<>'' and c.phone=v_phone) exact_phone,
       (v_name<>'' and lower(btrim(coalesce(c.full_name,'')))=v_name and v_company<>'' and lower(btrim(coalesce(c.current_company,'')))=v_company) name_company,
       (v_name<>'' and lower(coalesce(c.full_name,''))=v_name and v_location<>'' and lower(trim(concat_ws(', ',c.city,c.region,c.country_code)))=v_location) name_location,
       (v_checksum is not null and exists(
