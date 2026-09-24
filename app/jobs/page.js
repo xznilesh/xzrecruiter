@@ -1,6 +1,7 @@
 import AppShell from '@/app/components/AppShell';
 import JobWorkspace from '@/app/components/JobWorkspace';
 import { requireReadyWorkspace } from '@/lib/workspace-ready';
+import { redirectRecruiterFromLegacyWorkspace } from '@/lib/recruiter-access';
 import { getJobSearch, getSavedViews } from '@/lib/ats';
 
 export const dynamic='force-dynamic';
@@ -8,6 +9,7 @@ export const dynamic='force-dynamic';
 export default async function JobsPage({searchParams}){
   const params=await searchParams;
   const {user,globalContext,onboarding}=await requireReadyWorkspace();
+  await redirectRecruiterFromLegacyWorkspace();
   const page=Math.max(1,Number(params?.page||1));const limit=50;
   const filters={countryCode:String(params?.country||''),status:String(params?.status||''),priority:String(params?.priority||''),workplace:String(params?.workplace||''),pipelineId:String(params?.pipeline||'')};
   const [context,savedViews]=await Promise.all([
