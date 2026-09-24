@@ -2,13 +2,8 @@ import { createHash } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { jdAction, getRequirementContext } from '@/lib/jd';
 import { analyzeJdServer, jdAiConfigured } from '@/lib/jd-ai-server';
-import {
-  JD_PROMPT_VERSION,
-  JD_SCHEMA_VERSION,
-  createJdIdempotencyKey,
-  sanitizeJdText,
-  validateAiRequirementOutput,
-} from '@/lib/jd-ai.mjs';
+import { createJdIdempotencyKey } from '@/lib/jd-ai.mjs';
+import { JD_PROMPT_VERSION, JD_SCHEMA_VERSION, sanitizeJdText, validateAiRequirementOutput } from '@/lib/jd-contract.mjs';
 
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
