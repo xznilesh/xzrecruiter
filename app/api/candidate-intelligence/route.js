@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { getCandidateIntelligenceContext,getCandidateIntelligenceInput,candidateIntelligenceAction } from '@/lib/candidate-intelligence';
 import { analyzeCandidateServer,candidateAiConfigured } from '@/lib/candidate-ai-server';
 import { createCandidateInputHash } from '@/lib/candidate-ai.mjs';
+import { CANDIDATE_AI_PROMPT_VERSION,CANDIDATE_AI_SCHEMA_VERSION } from '@/lib/candidate-ai-contract.mjs';
 import {
   buildCandidateProfileSnapshot,candidateProfileHash,candidateMatchIdempotencyKey,computeCandidateMatch,
   CANDIDATE_PROMPT_VERSION,CANDIDATE_MATCH_SCHEMA_VERSION,SCORING_CONFIG_VERSION
@@ -78,13 +79,13 @@ export async function POST(req){
     const scoringVersion=String(input?.scoring?.version||SCORING_CONFIG_VERSION);
     const idempotencyKey=candidateMatchIdempotencyKey({
       agencyId:input.agency_id,jobId,candidateId,briefId:input?.brief?.id,
-      profileHash:inputHash,scoringVersion,promptVersion:CANDIDATE_PROMPT_VERSION,
-      schemaVersion:CANDIDATE_MATCH_SCHEMA_VERSION
+      profileHash:inputHash,scoringVersion,promptVersion:CANDIDATE_AI_PROMPT_VERSION,
+      schemaVersion:CANDIDATE_AI_SCHEMA_VERSION
     });
 
     const begin=await candidateIntelligenceAction('begin',{
       jobId,candidateId,idempotencyKey,inputHash,modelRequested:model,
-      promptVersion:CANDIDATE_PROMPT_VERSION,schemaVersion:CANDIDATE_MATCH_SCHEMA_VERSION,scoringVersion
+      promptVersion:CANDIDATE_AI_PROMPT_VERSION,schemaVersion:CANDIDATE_AI_SCHEMA_VERSION,scoringVersion
     }).catch(()=>null);
     if(!begin?.ok)return fail(begin?.error||'candidate_intelligence_begin_failed');
     if(begin.reused&&begin.run_status==='SUCCEEDED'){
@@ -95,7 +96,7 @@ export async function POST(req){
 
     const started=Date.now();
     let aiExtraction={};
-    let aiMeta={model:'LOCAL_FALLBACK',promptVersion:CANDIDATE_PROMPT_VERSION,schemaVersion:CANDIDATE_MATCH_SCHEMA_VERSION,usage:null};
+    let aiMeta={model:'LOCAL_FALLBACK',promptVersion:CANDIDATE_AI_PROMPT_VERSION,schemaVersion:CANDIDATE_AI_SCHEMA_VERSION,matchSchemaVersion:CANDIDATE_MATCH_SCHEMA_VERSION,usage:null};
 
     if(candidateAiConfigured()){
       try{
