@@ -8,7 +8,7 @@ function sameOrigin(req){const origin=req.headers.get('origin');return !origin||
 function uuid(value){return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value||''))}
 function statusFor(error){
   if(error==='unauthorized')return 401;
-  if(['assignment_manager_only','recruiter_workspace_forbidden','requirement_access_forbidden','recruiter_intake_forbidden','candidate_access_forbidden','task_access_forbidden','task_forbidden','recruiter_self_assignment_only','resume_upload_forbidden'].includes(error))return 403;
+  if(['assignment_manager_only','recruiter_workspace_forbidden','requirement_access_forbidden','recruiter_intake_forbidden','candidate_access_forbidden','task_access_forbidden','task_forbidden','recruiter_self_assignment_only','resume_upload_forbidden','protected_requirement','execution_workspace_required'].includes(error))return 403;
   if(['job_not_found','task_not_found','candidate_not_found','parse_run_not_found'].includes(error))return 404;
   if(['candidate_intake_conflict','duplicate_requires_manager'].includes(error))return 409;
   if(['approved_requirement_required','assignee_not_recruiter','invalid_task_transition'].includes(error))return 422;
@@ -47,11 +47,16 @@ export async function POST(req){
 
   if(action==='saveAssignment'){
     if(!uuid(body?.jobId)||!uuid(body?.recruiterUserId))return fail('invalid_assignment');
+    if(body?.blockerOwnerUserId&&!uuid(body.blockerOwnerUserId))return fail('invalid_blocker_owner');
     const result=await recruiterAction('saveAssignment',{
       jobId:body.jobId,recruiterUserId:body.recruiterUserId,
       dailyTarget:body.dailyTarget,totalTarget:body.totalTarget,status:String(body.status||'ACTIVE').slice(0,30),
+      priority:String(body.priority||'').slice(0,30),
       priorityContext:String(body.priorityContext||'').slice(0,500),
       managerInstructions:String(body.managerInstructions||'').slice(0,2000),
+      blockerType:String(body.blockerType||'').slice(0,120),
+      blockerReason:String(body.blockerReason||'').slice(0,1500),
+      blockerOwnerUserId:body.blockerOwnerUserId||'',
       idempotencyKey:String(body.idempotencyKey||'').slice(0,160)
     }).catch(()=>null);
     if(!result?.ok)return fail(result?.error||'assignment_save_failed');
