@@ -12,8 +12,10 @@ const server=fs.readFileSync('lib/jd-ai-server.js','utf8');
 const client=fs.readFileSync('app/components/JdBrainWorkspace.js','utf8');
 
 for(const table of ['requirement_jd_sources','requirement_ai_runs','requirement_hiring_briefs','requirement_criteria','requirement_clarifications','requirement_brief_audit']){
-  assert.ok(sql.includes(`alter table public.${table} enable row level security`));
+  assert.ok(sql.includes(`'${table}'`),`RLS table list missing ${table}`);
 }
+assert.ok(sql.includes("execute format('alter table public.%I enable row level security',t)"),'dynamic RLS enable statement missing');
+assert.ok(sql.includes('xzrecruiter_data_api_deny'),'deny-by-default browser policy missing');
 for(const fn of ['xzrecruiter_prepare_jd_source','xzrecruiter_finalize_jd_source','xzrecruiter_jd_source_text','xzrecruiter_begin_jd_ai_run','xzrecruiter_complete_jd_ai_run','xzrecruiter_save_hiring_brief','xzrecruiter_request_hiring_brief_revision','xzrecruiter_approve_hiring_brief','xzrecruiter_requirement_context','xzrecruiter_jd_document_access']){
   assert.ok(sql.includes(`revoke all on function public.${fn}`),`public execute not revoked for ${fn}`);
 }
