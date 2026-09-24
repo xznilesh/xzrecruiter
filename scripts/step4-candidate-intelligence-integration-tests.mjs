@@ -24,6 +24,7 @@ assert.ok(core.includes('uq_xzr_candidate_profile_current'),'single current prof
 assert.ok(core.includes('unique(agency_id,idempotency_key)'),'intelligence job idempotency uniqueness missing');
 assert.ok(core.includes('current_candidate_match_id'),'application current match pointer missing');
 assert.ok(core.includes('xz-candidate-match-v2'),'match schema version v2 missing');
+assert.ok(core.includes("profile_schema_version text not null default 'xz-candidate-profile-v2'"),'candidate profile schema version must be persisted');
 
 for(const token of [
   'xzrecruiter_candidate_intelligence_access','agency_id=v_agency','approved_hiring_brief_id',
