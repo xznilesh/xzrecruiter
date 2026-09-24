@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-const sql=fs.readFileSync('supabase/migrations/20260926_step3_recruiter_execution_workspace.sql','utf8');
+const migrationPath='supabase/migrations/20260926_step3_recruiter_execution_workspace.sql';
+const sql=fs.readFileSync(migrationPath,'utf8');
+assert.equal(fs.existsSync('supabase/migrations/20260925_step3_recruiter_execution_workspace.sql'),false,'duplicate Step-3 migration must not exist');
+assert.equal((sql.match(/as \$fn\$/g)||[]).length,(sql.match(/\$fn\$;/g)||[]).length,'unbalanced SQL function dollar quotes');
+assert.equal((sql.match(/do \$do\$/g)||[]).length,(sql.match(/\$do\$;/g)||[]).length,'unbalanced SQL DO dollar quotes');
 const recruiter=fs.readFileSync('lib/recruiter.js','utf8');
 const api=fs.readFileSync('app/api/recruiter/route.js','utf8');
 
 for(const token of [
-  'requirement_recruiter_assignments',
+  'requirement_recruiter_assignments','submission_target_total','total_submission_target','invalidated_at','withdrawn_at',
   'alter table public.applications add column if not exists source_type',
   'alter table public.crm_tasks add column if not exists task_type',
   'xzrecruiter_save_requirement_assignment',
@@ -35,6 +39,8 @@ assert.ok(sql.includes("not in ('WITHDRAWN','REJECTED')"),'invalid/withdrawn can
 assert.ok(sql.includes("'jobs_requiring_attention',v_attention"),'attention metric must exclude fully achieved/no-action roles');
 assert.ok(sql.includes('due_tasks_today'),'due-today follow-up calculation missing');
 assert.ok(sql.includes("workflow_status='CLIENT_SUBMITTED'")&&sql.includes("status='SUBMITTED'"),'valid submission definition missing');
+assert.ok(sql.includes('cs.invalidated_at is null')&&sql.includes('cs.withdrawn_at is null'),'invalidated/withdrawn submissions must not count');
+assert.ok(sql.includes('cs.created_by_user_id=ra.recruiter_user_id')&&sql.includes('cs.created_by_user_id=v_user'),'recruiter credit must follow submission creator');
 
 for(const token of ['saveAssignment','intakeCandidate','candidateSearch','saveTask','setTaskStatus','prepareResume','finalizeResume']){
   assert.ok(recruiter.includes(token),'server adapter missing '+token);
