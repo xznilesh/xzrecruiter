@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { candidateMatchIdempotencyKey,candidateProfileHash } from '../lib/candidate-intelligence.mjs';
+import { createCandidateInputHash } from '../lib/candidate-ai.mjs';
 import { loadFixtures,profileForFixture } from './step4-candidate-intelligence-test-helpers.mjs';
 
 const core=fs.readFileSync('supabase/migrations/20260925_step4_candidate_intelligence_core.sql','utf8');
@@ -44,5 +45,9 @@ assert.notEqual(same,candidateMatchIdempotencyKey({...base,jobId:'job-2'}),'same
 assert.notEqual(same,candidateMatchIdempotencyKey({...base,briefId:'brief-2'}),'requirement change must change idempotency identity');
 assert.notEqual(same,candidateMatchIdempotencyKey({...base,profileHash:'updated-profile'}),'candidate/resume update must change idempotency identity');
 assert.notEqual(same,candidateMatchIdempotencyKey({...base,scoringVersion:'score-v3'}),'scoring version change must change idempotency identity');
+
+const rawHashA=createCandidateInputHash({resumeText:'same resume',candidateProfile:{id:'c'},requirementContext:{briefId:'b'},sourceMeta:{documentId:'doc1',documentVersion:1,parseRunId:'p1'}});
+const rawHashB=createCandidateInputHash({resumeText:'same resume',candidateProfile:{id:'c'},requirementContext:{briefId:'b'},sourceMeta:{documentId:'doc2',documentVersion:2,parseRunId:'p2'}});
+assert.notEqual(rawHashA,rawHashB,'new resume/document version must not reuse old intelligence even when extracted text is identical');
 
 console.log('STEP4_CANDIDATE_CONCURRENCY_PASS advisory_lock=true replay=true stale_snapshots=true history=true resume_version=true multi_requirement=true');
