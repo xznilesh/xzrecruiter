@@ -32,6 +32,8 @@ assert.ok(sql.includes('uq_xzr_requirement_assignment_idempotency'),'assignment 
 assert.ok(sql.includes("workspace_global_settings"),'workspace timezone source missing');
 assert.ok(sql.includes("at time zone timezone_id"),'business-day timezone bounds missing');
 assert.ok(sql.includes("not in ('WITHDRAWN','REJECTED')"),'invalid/withdrawn candidacies must not count toward target');
+assert.ok(sql.includes("'jobs_requiring_attention',v_attention"),'attention metric must exclude fully achieved/no-action roles');
+assert.ok(sql.includes('due_tasks_today'),'due-today follow-up calculation missing');
 assert.ok(sql.includes("workflow_status='CLIENT_SUBMITTED'")&&sql.includes("status='SUBMITTED'"),'valid submission definition missing');
 
 for(const token of ['saveAssignment','intakeCandidate','candidateSearch','saveTask','setTaskStatus','prepareResume','finalizeResume']){
