@@ -346,12 +346,16 @@ begin
   from public.candidate_submissions
   where agency_id=v_agency
     and application_id=p_application_id
-    and workflow_status in ('DRAFT','RETURNED_TO_RECRUITER','INTERNAL_SUBMITTED')
   order by created_at desc
   limit 1;
 
   if v_workflow_status='INTERNAL_SUBMITTED' then
     return jsonb_build_object('ok',false,'error','am_review_pending');
+  end if;
+  if v_workflow_status in ('AM_APPROVED','AM_REJECTED','CLIENT_SUBMITTED') then
+    return jsonb_build_object(
+      'ok',false,'error','invalid_workflow_transition','from_state',v_workflow_status
+    );
   end if;
 
   if v_id is null then
