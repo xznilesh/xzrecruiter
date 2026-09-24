@@ -135,6 +135,7 @@ export default function RecruiterRequirementWorkspace({initialContext,jobId}){
      <div><span>Assigned target</span><b>{execution.daily_target||0}</b></div>
      <div><span>Valid today</span><b>{execution.valid_submissions_today||0}</b></div>
      <div className={Number(execution.remaining_target||0)>0?'attention':'done'}><span>Remaining</span><b>{execution.remaining_target||0}</b></div>
+     <div><span>Total target gap</span><b>{execution.remaining_total_target||0}</b></div>
      <div><span>Due date</span><b>{job.target_fill_date||'Not set'}</b></div>
      <div><span>Status</span><b>{job.status||'OPEN'}</b></div>
      <div><span>Blockers</span><b>{blockers.length}</b></div>
