@@ -106,6 +106,7 @@ assert.equal(aiValidation.ok,true,aiValidation.errors.join(','));
 
 assert.equal(matchBand(95,{hardFail:true,confidence:1}),'Mandatory Requirement Missing');
 assert.equal(matchBand(95,{hardUnknown:true,confidence:1}),'Possible Match');
+assert.equal(matchBand(95,{hardWarn:true,confidence:1}),'Possible Match');
 assert.equal(matchBand(95,{mustGap:true,confidence:1}),'Possible Match');
 
 console.log('STEP4_CANDIDATE_UNIT_PASS normalization=true experience=true hard_rules=true unknown_safe=true evidence=true weights=true versioning=true injection=true');
