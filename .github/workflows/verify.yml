@@ -1,7 +1,7 @@
 name: XZRecruiter production verification
 on:
   push:
-    branches: [production-rebuild-v1, main, step1-workflow-contract-lock, step2-ai-jd-brain, step2-global-foundation, step3-agency-onboarding, step4-global-enterprise-ats, step4-closeout-stage-guard, step4-closeout-public-apply, step4-final-quality, step5-recruitment-crm]
+    branches: [production-rebuild-v1, main, step1-workflow-contract-lock, step2-ai-jd-brain, step3-recruiter-execution-workspace, step2-global-foundation, step3-agency-onboarding, step4-global-enterprise-ats, step4-closeout-stage-guard, step4-closeout-public-apply, step4-final-quality, step5-recruitment-crm]
   pull_request:
     branches: [main, step1-workflow-contract-lock, step2-global-foundation, step3-agency-onboarding, step4-global-enterprise-ats]
 jobs:
@@ -23,6 +23,13 @@ jobs:
       - run: npm run test:step2:jd:security
       - run: npm run test:step2:jd:regression
       - run: npm run test:step2
+      - run: npm run check:step3:execution:syntax
+      - run: npm run test:step3:execution:unit
+      - run: npm run test:step3:execution:integration
+      - run: npm run test:step3:execution:e2e
+      - run: npm run test:step3:execution:security
+      - run: npm run test:step3:execution:performance
+      - run: npm run test:step3:execution:responsive
       - run: npm run test:step3
       - run: npm run test:step4
       - run: npm run test:step4:closeout
