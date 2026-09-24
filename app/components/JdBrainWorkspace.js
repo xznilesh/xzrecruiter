@@ -47,7 +47,7 @@ export default function JdBrainWorkspace({jobId,initialContext,aiConfigured=fals
   const canApprove=briefMeta?.brief_status==='READY_FOR_APPROVAL';
   const reviewLocked=briefMeta?.brief_status==='APPROVED'||briefMeta?.brief_status==='SUPERSEDED';
   const unresolvedBlocking=clarifications.filter((x)=>x.blocking&&!x.resolved).length;
-  const pendingHard=criteria.filter((x)=>x.kind==='HARD_REQUIREMENT'&&(x.enforcement==='PROPOSED_REVIEW'||x.requiresAmConfirmation)&&!x.amConfirmed).length;
+  const pendingHard=criteria.filter((x)=>x.kind==='HARD_REQUIREMENT'&&!x.amConfirmed).length;
 
   async function refresh(){
     const res=await fetch(`/api/requirements/jd?jobId=${encodeURIComponent(jobId)}`,{cache:'no-store'});
@@ -180,7 +180,7 @@ export default function JdBrainWorkspace({jobId,initialContext,aiConfigured=fals
         <div className="closeout-title"><div><h2>4. Hard rules vs preferences</h2><small>Proposed hard rules cannot become active recruiter rejection rules until the AM confirms them.</small></div><span className={pendingHard?'status warn':'status good'}>{pendingHard} hard rule{pendingHard===1?'':'s'} need confirmation</span></div>
         <div className="jd-criteria-list">{criteria.length?criteria.map((c,i)=><article key={c.id||i} className={c.kind==='HARD_REQUIREMENT'?'hard':''}>
           <div className="jd-criterion-main"><select value={c.kind||'RANKING_PREFERENCE'} onChange={(e)=>updateCriterion(i,{kind:e.target.value})}><option>HARD_REQUIREMENT</option><option>MUST_HAVE</option><option>NICE_TO_HAVE</option><option>RANKING_PREFERENCE</option></select><input value={c.label||''} onChange={(e)=>updateCriterion(i,{label:e.target.value})}/><textarea rows="2" value={c.value||''} onChange={(e)=>updateCriterion(i,{value:e.target.value})}/></div>
-          <div className="jd-criterion-meta"><span>{prettyStatus(c.status)} · {Math.round(Number(c.confidence||0)*100)}%</span><span>{prettyStatus(c.enforcement)}</span>{c.kind==='HARD_REQUIREMENT'&&(c.requiresAmConfirmation||c.enforcement==='PROPOSED_REVIEW')?<label><input type="checkbox" checked={Boolean(c.amConfirmed)} onChange={(e)=>updateCriterion(i,{amConfirmed:e.target.checked})}/> AM confirms this hard requirement</label>:null}<button className="danger-action" type="button" onClick={()=>removeCriterion(i)}>Remove</button></div>
+          <div className="jd-criterion-meta"><span>{prettyStatus(c.status)} · {Math.round(Number(c.confidence||0)*100)}%</span><span>{prettyStatus(c.enforcement)}</span>{c.kind==='HARD_REQUIREMENT'?<label><input type="checkbox" checked={Boolean(c.amConfirmed)} onChange={(e)=>updateCriterion(i,{amConfirmed:e.target.checked})}/> AM confirms this hard requirement</label>:null}<button className="danger-action" type="button" onClick={()=>removeCriterion(i)}>Remove</button></div>
           {Array.isArray(c.evidence)&&c.evidence.length?<details><summary>Evidence</summary>{c.evidence.map((x,n)=><p key={n}>“{x}”</p>)}</details>:null}
         </article>):<div className="ats-empty">No criteria extracted.</div>}</div>
       </section>
