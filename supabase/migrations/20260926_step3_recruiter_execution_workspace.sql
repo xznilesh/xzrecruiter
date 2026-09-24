@@ -834,7 +834,7 @@ set search_path='public','private','extensions','pg_temp'
 as $fn$
 declare
   v_agency uuid;v_user uuid;v_membership_role text;v_business_role text;v_id uuid;v_job uuid;v_candidate uuid;v_app uuid;
-  v_assignee uuid;v_type text;v_title text;v_status text;v_priority text;v_existing uuid;v_idem text;
+  v_assignee uuid;v_type text;v_title text;v_status text;v_priority text;v_existing uuid;v_idem text;v_timezone text;v_due timestamptz;
 begin
   select agency_id,user_id,role into v_agency,v_user,v_membership_role
   from private.xzrecruiter_session_context(p_token);
@@ -867,6 +867,16 @@ begin
   if not exists(select 1 from public.agency_memberships where agency_id=v_agency and user_id=v_assignee) then
     return jsonb_build_object('ok',false,'error','invalid_assignee');
   end if;
+  select coalesce(timezone_id,'UTC') into v_timezone
+  from public.workspace_global_settings where agency_id=v_agency;
+  v_timezone:=coalesce(v_timezone,'UTC');
+  if nullif(p_task->>'dueLocal','') is not null then
+    begin
+      v_due:=(p_task->>'dueLocal')::timestamp at time zone v_timezone;
+    exception when others then
+      return jsonb_build_object('ok',false,'error','invalid_due_local');
+    end;
+  end if;
   if v_app is not null and not exists(
     select 1 from public.applications
     where id=v_app and agency_id=v_agency and job_id=v_job and archived_at is null
@@ -898,7 +908,7 @@ begin
     task_type,job_id,candidate_id,application_id,idempotency_key
   ) values(
     v_id,v_agency,left(v_title,500),nullif(left(coalesce(p_task->>'description',''),2000),''),
-    v_status,v_priority,nullif(p_task->>'dueAt','')::timestamptz,v_assignee,v_user,
+    v_status,v_priority,v_due,v_assignee,v_user,
     v_type,v_job,v_candidate,v_app,left(v_idem,160)
   );
   perform private.xzrecruiter_log_activity(
