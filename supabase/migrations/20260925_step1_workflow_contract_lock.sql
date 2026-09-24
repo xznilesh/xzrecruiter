@@ -685,3 +685,346 @@ grant execute on function public.xzrecruiter_application_closeout_context(text,u
 
 -- Explicitly preserve direct-browser deny for tenant data.
 alter table public.candidate_submissions enable row level security;
+
+
+-- 9) Downstream ownership guardrails: preserve existing operations but prevent recruiter/AM role collapse.
+create or replace function public.xzrecruiter_schedule_interview(p_token text,p_interview jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path='public','private','extensions','pg_temp'
+as $fn$
+declare
+  v_agency uuid;v_user uuid;v_membership_role text;v_business_role text;
+  v_id uuid;v_app uuid;v_start timestamptz;v_end timestamptz;v_tz text;v_stage_code text;
+begin
+  select agency_id,user_id,role into v_agency,v_user,v_membership_role
+  from private.xzrecruiter_session_context(p_token);
+  if v_agency is null then return jsonb_build_object('ok',false,'error','unauthorized'); end if;
+
+  v_business_role:=private.xzrecruiter_business_role(v_agency,v_user,v_membership_role);
+  if v_business_role not in ('OWNER','ADMIN','ACCOUNT_MANAGER','RECRUITMENT_MANAGER') then
+    return jsonb_build_object('ok',false,'error','interview_role_forbidden');
+  end if;
+
+  v_app:=nullif(p_interview->>'applicationId','')::uuid;
+  select ps.code into v_stage_code
+  from public.applications a
+  left join public.pipeline_stages ps on ps.id=a.stage_id and ps.agency_id=v_agency
+  where a.id=v_app and a.agency_id=v_agency and a.archived_at is null;
+  if not found then return jsonb_build_object('ok',false,'error','application_not_found'); end if;
+  if upper(coalesce(v_stage_code,'')) not in ('SUBMITTED','INTERVIEW') then
+    return jsonb_build_object('ok',false,'error','invalid_workflow_transition','required_state','CLIENT_SUBMITTED');
+  end if;
+  if not exists(
+    select 1 from public.candidate_submissions cs
+    where cs.agency_id=v_agency and cs.application_id=v_app and cs.workflow_status='CLIENT_SUBMITTED'
+  ) then
+    return jsonb_build_object('ok',false,'error','am_quality_gate_required');
+  end if;
+
+  v_start:=(p_interview->>'scheduledAt')::timestamptz;
+  v_end:=coalesce(nullif(p_interview->>'endAt','')::timestamptz,v_start+interval '1 hour');
+  if v_end<=v_start then return jsonb_build_object('ok',false,'error','invalid_time_range'); end if;
+  v_tz:=coalesce(nullif(p_interview->>'timezone',''),'UTC');
+  if not public.xzrecruiter_valid_timezone(v_tz) then return jsonb_build_object('ok',false,'error','invalid_timezone'); end if;
+
+  v_id:=gen_random_uuid();
+  insert into public.interviews(
+    id,agency_id,application_id,interview_type,scheduled_at,timezone,location_or_link,status,
+    created_by_user_id,end_at,candidate_timezone,recruiter_timezone,meeting_url,instructions,
+    interviewers,scorecard_template_id
+  ) values(
+    v_id,v_agency,v_app,coalesce(nullif(p_interview->>'interviewType',''),'CUSTOM'),
+    v_start,v_tz,nullif(p_interview->>'locationOrLink',''),'SCHEDULED',
+    v_user,v_end,nullif(p_interview->>'candidateTimezone',''),
+    nullif(p_interview->>'recruiterTimezone',''),nullif(p_interview->>'meetingUrl',''),
+    nullif(p_interview->>'instructions',''),coalesce(p_interview->'interviewers','[]'::jsonb),
+    nullif(p_interview->>'scorecardTemplateId','')::uuid
+  );
+
+  perform private.xzrecruiter_log_activity(
+    v_agency,v_user,'interview',v_id,'interview.scheduled','Interview scheduled',
+    jsonb_build_object('application_id',v_app,'timezone',v_tz,'business_role',v_business_role)
+  );
+  return jsonb_build_object('ok',true,'id',v_id);
+end;
+$fn$;
+
+create or replace function public.xzrecruiter_save_offer(p_token text,p_offer jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path='public','private','extensions','pg_temp'
+as $fn$
+declare
+  v_agency uuid;v_user uuid;v_membership_role text;v_business_role text;
+  v_id uuid;v_app uuid;v_parent uuid;v_version integer:=1;v_stage_code text;
+begin
+  select agency_id,user_id,role into v_agency,v_user,v_membership_role
+  from private.xzrecruiter_session_context(p_token);
+  if v_agency is null then return jsonb_build_object('ok',false,'error','unauthorized'); end if;
+
+  v_business_role:=private.xzrecruiter_business_role(v_agency,v_user,v_membership_role);
+  if v_business_role not in ('OWNER','ADMIN','ACCOUNT_MANAGER') then
+    return jsonb_build_object('ok',false,'error','offer_role_forbidden');
+  end if;
+
+  v_app:=nullif(p_offer->>'applicationId','')::uuid;
+  select ps.code into v_stage_code
+  from public.applications a
+  left join public.pipeline_stages ps on ps.id=a.stage_id and ps.agency_id=v_agency
+  where a.id=v_app and a.agency_id=v_agency and a.archived_at is null;
+  if not found then return jsonb_build_object('ok',false,'error','application_not_found'); end if;
+  if upper(coalesce(v_stage_code,'')) not in ('INTERVIEW','OFFER') then
+    return jsonb_build_object('ok',false,'error','invalid_workflow_transition','required_state','INTERVIEW');
+  end if;
+
+  v_parent:=nullif(p_offer->>'parentOfferId','')::uuid;
+  if v_parent is not null then
+    if not exists(select 1 from public.offers where id=v_parent and agency_id=v_agency and application_id=v_app) then
+      return jsonb_build_object('ok',false,'error','parent_offer_not_found');
+    end if;
+    select max(version_number)+1 into v_version
+    from public.offers
+    where agency_id=v_agency and application_id=v_app and (id=v_parent or parent_offer_id=v_parent);
+    v_version:=coalesce(v_version,2);
+  end if;
+
+  v_id:=gen_random_uuid();
+  insert into public.offers(
+    id,agency_id,application_id,amount,currency,status,start_date,note,created_by_user_id,
+    title,location,salary_period,bonus,commission,ote,equity,allowances,expires_at,
+    employment_type,version_number,parent_offer_id
+  ) values(
+    v_id,v_agency,v_app,nullif(p_offer->>'amount','')::numeric,
+    nullif(upper(p_offer->>'currency'),''),'DRAFT',nullif(p_offer->>'startDate','')::date,
+    nullif(p_offer->>'note',''),v_user,nullif(p_offer->>'title',''),
+    nullif(p_offer->>'location',''),nullif(p_offer->>'salaryPeriod',''),
+    nullif(p_offer->>'bonus','')::numeric,nullif(p_offer->>'commission','')::numeric,
+    nullif(p_offer->>'ote','')::numeric,nullif(p_offer->>'equity',''),
+    coalesce(p_offer->'allowances','[]'::jsonb),nullif(p_offer->>'expiresAt','')::timestamptz,
+    nullif(p_offer->>'employmentType',''),v_version,v_parent
+  );
+
+  perform private.xzrecruiter_log_activity(
+    v_agency,v_user,'offer',v_id,'offer.created','Offer version created',
+    jsonb_build_object('application_id',v_app,'version',v_version,'business_role',v_business_role)
+  );
+  return jsonb_build_object('ok',true,'id',v_id,'version',v_version);
+end;
+$fn$;
+
+create or replace function public.xzrecruiter_offer_approval_action(
+  p_token text,p_offer_id uuid,p_action text,p_note text default null
+) returns jsonb
+language plpgsql
+security definer
+set search_path='public','private','extensions','pg_temp'
+as $fn$
+declare
+  v_agency uuid;v_user uuid;v_membership_role text;v_business_role text;
+  v_action text:=upper(coalesce(p_action,''));v_status text;v_approval uuid;
+begin
+  select agency_id,user_id,role into v_agency,v_user,v_membership_role
+  from private.xzrecruiter_session_context(p_token);
+  if v_agency is null then return jsonb_build_object('ok',false,'error','unauthorized'); end if;
+  v_business_role:=private.xzrecruiter_business_role(v_agency,v_user,v_membership_role);
+
+  select status into v_status from public.offers where id=p_offer_id and agency_id=v_agency;
+  if v_status is null then return jsonb_build_object('ok',false,'error','offer_not_found'); end if;
+
+  if v_action='REQUEST' then
+    if v_business_role not in ('OWNER','ADMIN','ACCOUNT_MANAGER') then
+      return jsonb_build_object('ok',false,'error','offer_role_forbidden');
+    end if;
+    if v_status not in ('DRAFT','PENDING_APPROVAL') then
+      return jsonb_build_object('ok',false,'error','invalid_offer_state');
+    end if;
+    select id into v_approval
+    from public.offer_approvals
+    where agency_id=v_agency and offer_id=p_offer_id and step_order=1;
+    if v_approval is null then
+      v_approval:=gen_random_uuid();
+      insert into public.offer_approvals(id,agency_id,offer_id,step_order,required_role,status)
+      values(v_approval,v_agency,p_offer_id,1,'ADMIN','PENDING');
+    else
+      update public.offer_approvals
+      set status='PENDING',decision_note=null,decided_at=null
+      where id=v_approval and agency_id=v_agency;
+    end if;
+    update public.offers set status='PENDING_APPROVAL' where id=p_offer_id and agency_id=v_agency;
+  elsif v_action in ('APPROVE','REJECT') then
+    if v_business_role not in ('OWNER','ADMIN') then
+      return jsonb_build_object('ok',false,'error','approval_forbidden');
+    end if;
+    select id into v_approval
+    from public.offer_approvals
+    where agency_id=v_agency and offer_id=p_offer_id and status='PENDING'
+    order by step_order limit 1;
+    if v_approval is null then return jsonb_build_object('ok',false,'error','approval_not_pending'); end if;
+    update public.offer_approvals
+    set status=case when v_action='APPROVE' then 'APPROVED' else 'REJECTED' end,
+        approver_user_id=v_user,decision_note=nullif(btrim(coalesce(p_note,'')),''),
+        decided_at=now()
+    where id=v_approval and agency_id=v_agency;
+    update public.offers
+    set status=case when v_action='APPROVE' then 'APPROVED' else 'DRAFT' end,
+        metadata=coalesce(metadata,'{}'::jsonb)||
+          jsonb_build_object('last_approval_action',v_action,'last_approval_note',p_note)
+    where id=p_offer_id and agency_id=v_agency;
+  else
+    return jsonb_build_object('ok',false,'error','invalid_approval_action');
+  end if;
+
+  perform private.xzrecruiter_log_activity(
+    v_agency,v_user,'offer',p_offer_id,'offer.approval_'||lower(v_action),
+    'Offer approval action',jsonb_build_object('action',v_action,'note',p_note,'business_role',v_business_role)
+  );
+  return jsonb_build_object('ok',true,'action',v_action);
+end;
+$fn$;
+
+create or replace function public.xzrecruiter_offer_set_status(
+  p_token text,p_offer_id uuid,p_status text
+) returns jsonb
+language plpgsql
+security definer
+set search_path='public','private','extensions','pg_temp'
+as $fn$
+declare
+  v_agency uuid;v_user uuid;v_membership_role text;v_business_role text;
+  v_current text;v_new text:=upper(coalesce(p_status,''));
+begin
+  select agency_id,user_id,role into v_agency,v_user,v_membership_role
+  from private.xzrecruiter_session_context(p_token);
+  if v_agency is null then return jsonb_build_object('ok',false,'error','unauthorized'); end if;
+  v_business_role:=private.xzrecruiter_business_role(v_agency,v_user,v_membership_role);
+  if v_business_role not in ('OWNER','ADMIN','ACCOUNT_MANAGER') then
+    return jsonb_build_object('ok',false,'error','offer_role_forbidden');
+  end if;
+
+  if v_new not in ('SENT','VIEWED','ACCEPTED','DECLINED','EXPIRED','WITHDRAWN') then
+    return jsonb_build_object('ok',false,'error','invalid_status');
+  end if;
+  select status into v_current from public.offers where id=p_offer_id and agency_id=v_agency;
+  if v_current is null then return jsonb_build_object('ok',false,'error','offer_not_found'); end if;
+
+  if not (
+    (v_current='APPROVED' and v_new='SENT') or
+    (v_current='SENT' and v_new in ('VIEWED','ACCEPTED','DECLINED','EXPIRED','WITHDRAWN')) or
+    (v_current='VIEWED' and v_new in ('ACCEPTED','DECLINED','EXPIRED','WITHDRAWN'))
+  ) then
+    return jsonb_build_object(
+      'ok',false,'error','invalid_workflow_transition',
+      'from_state',v_current,'to_state',v_new
+    );
+  end if;
+
+  update public.offers
+  set status=v_new,
+      sent_at=case when v_new='SENT' then coalesce(sent_at,now()) else sent_at end,
+      viewed_at=case when v_new='VIEWED' then coalesce(viewed_at,now()) else viewed_at end,
+      accepted_at=case when v_new='ACCEPTED' then coalesce(accepted_at,now()) else accepted_at end,
+      declined_at=case when v_new='DECLINED' then coalesce(declined_at,now()) else declined_at end,
+      withdrawn_at=case when v_new='WITHDRAWN' then coalesce(withdrawn_at,now()) else withdrawn_at end
+  where id=p_offer_id and agency_id=v_agency;
+
+  perform private.xzrecruiter_log_activity(
+    v_agency,v_user,'offer',p_offer_id,'offer.status_changed',v_current||' → '||v_new,
+    jsonb_build_object('business_role',v_business_role)
+  );
+  return jsonb_build_object('ok',true,'status',v_new);
+end;
+$fn$;
+
+create or replace function public.xzrecruiter_create_placement(p_token text,p_placement jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path='public','private','extensions','pg_temp'
+as $fn$
+declare
+  v_agency uuid;v_user uuid;v_membership_role text;v_business_role text;
+  v_id uuid;v_app uuid;v_candidate uuid;v_job uuid;v_client uuid;v_offer uuid;
+begin
+  select agency_id,user_id,role into v_agency,v_user,v_membership_role
+  from private.xzrecruiter_session_context(p_token);
+  if v_agency is null then return jsonb_build_object('ok',false,'error','unauthorized'); end if;
+  v_business_role:=private.xzrecruiter_business_role(v_agency,v_user,v_membership_role);
+  if v_business_role not in ('OWNER','ADMIN','ACCOUNT_MANAGER','RECRUITMENT_MANAGER') then
+    return jsonb_build_object('ok',false,'error','joining_role_forbidden');
+  end if;
+
+  v_app:=nullif(p_placement->>'applicationId','')::uuid;
+  select candidate_id,job_id,client_id into v_candidate,v_job,v_client
+  from public.applications
+  where id=v_app and agency_id=v_agency and archived_at is null;
+  if not found then return jsonb_build_object('ok',false,'error','application_not_found'); end if;
+
+  begin v_offer:=nullif(p_placement->>'offerId','')::uuid; exception when invalid_text_representation then v_offer:=null; end;
+  if v_offer is null then
+    select id into v_offer
+    from public.offers
+    where agency_id=v_agency and application_id=v_app and status='ACCEPTED'
+    order by accepted_at desc nulls last,created_at desc limit 1;
+  end if;
+  if v_offer is null or not exists(
+    select 1 from public.offers
+    where id=v_offer and agency_id=v_agency and application_id=v_app and status='ACCEPTED'
+  ) then
+    return jsonb_build_object('ok',false,'error','accepted_offer_required');
+  end if;
+
+  if exists(
+    select 1 from public.placements
+    where agency_id=v_agency and application_id=v_app and status not in ('CANCELLED')
+  ) then
+    return jsonb_build_object('ok',false,'error','placement_exists');
+  end if;
+
+  v_id:=gen_random_uuid();
+  insert into public.placements(
+    id,agency_id,application_id,offer_id,placement_fee,fee_currency,start_date,
+    created_by_user_id,candidate_id,job_id,client_id,recruiter_user_id,salary,
+    salary_currency,status,fee_type,fee_percent,guarantee_end_date,commission_amount
+  ) values(
+    v_id,v_agency,v_app,v_offer,nullif(p_placement->>'placementFee','')::numeric,
+    nullif(upper(p_placement->>'feeCurrency'),''),nullif(p_placement->>'startDate','')::date,
+    v_user,v_candidate,v_job,v_client,v_user,nullif(p_placement->>'salary','')::numeric,
+    nullif(upper(p_placement->>'salaryCurrency'),''),'PLANNED',
+    nullif(p_placement->>'feeType',''),nullif(p_placement->>'feePercent','')::numeric,
+    nullif(p_placement->>'guaranteeEndDate','')::date,
+    nullif(p_placement->>'commissionAmount','')::numeric
+  );
+
+  perform private.xzrecruiter_log_activity(
+    v_agency,v_user,'placement',v_id,'joining.started','Pre-joining record created',
+    jsonb_build_object('application_id',v_app,'offer_id',v_offer,'business_role',v_business_role)
+  );
+  return jsonb_build_object('ok',true,'id',v_id);
+end;
+$fn$;
+
+-- Security-definer RPCs are explicit API endpoints; remove implicit PUBLIC execute first.
+revoke all on function public.xzrecruiter_move_application_workflow(text,uuid,uuid,text) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_save_candidate_submission(text,uuid,jsonb,boolean) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_review_internal_submission(text,uuid,text,text) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_mark_client_submitted(text,uuid) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_application_closeout_context(text,uuid) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_schedule_interview(text,jsonb) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_save_offer(text,jsonb) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_offer_approval_action(text,uuid,text,text) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_offer_set_status(text,uuid,text) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_create_placement(text,jsonb) from public,anon,authenticated;
+
+grant execute on function public.xzrecruiter_move_application_workflow(text,uuid,uuid,text) to anon,authenticated;
+grant execute on function public.xzrecruiter_save_candidate_submission(text,uuid,jsonb,boolean) to anon,authenticated;
+grant execute on function public.xzrecruiter_review_internal_submission(text,uuid,text,text) to anon,authenticated;
+grant execute on function public.xzrecruiter_mark_client_submitted(text,uuid) to anon,authenticated;
+grant execute on function public.xzrecruiter_application_closeout_context(text,uuid) to anon,authenticated;
+grant execute on function public.xzrecruiter_schedule_interview(text,jsonb) to anon,authenticated;
+grant execute on function public.xzrecruiter_save_offer(text,jsonb) to anon,authenticated;
+grant execute on function public.xzrecruiter_offer_approval_action(text,uuid,text,text) to anon,authenticated;
+grant execute on function public.xzrecruiter_offer_set_status(text,uuid,text) to anon,authenticated;
+grant execute on function public.xzrecruiter_create_placement(text,jsonb) to anon,authenticated;
