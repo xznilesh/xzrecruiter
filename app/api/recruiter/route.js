@@ -8,14 +8,10 @@ function sameOrigin(req){const origin=req.headers.get('origin');return !origin||
 function uuid(value){return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value||''))}
 function statusFor(error){
   if(error==='unauthorized')return 401;
-  if([
-    'assignment_forbidden','target_update_forbidden','recruiter_workspace_forbidden',
-    'requirement_access_denied','recruiter_execution_forbidden','candidate_access_denied',
-    'task_access_denied','recruiter_cannot_assign_others','document_access_denied'
-  ].includes(error))return 403;
-  if(['job_not_found','task_not_found','candidate_not_found'].includes(error))return 404;
-  if(['candidate_intake_conflict','existing_candidate_found','duplicate_or_concurrent_intake'].includes(error))return 409;
-  if(['requirement_not_recruiter_ready','assignee_not_assigned_to_requirement'].includes(error))return 422;
+  if(['assignment_manager_only','recruiter_workspace_forbidden','requirement_access_forbidden','recruiter_intake_forbidden','candidate_access_forbidden','task_access_forbidden','task_forbidden','recruiter_self_assignment_only','resume_upload_forbidden'].includes(error))return 403;
+  if(['job_not_found','task_not_found','candidate_not_found','parse_run_not_found'].includes(error))return 404;
+  if(['candidate_intake_conflict','duplicate_requires_manager'].includes(error))return 409;
+  if(['approved_requirement_required','assignee_not_recruiter','invalid_task_transition'].includes(error))return 422;
   return 400;
 }
 function fail(error,extra={}){return NextResponse.json({ok:false,error,...extra},{status:statusFor(error)})}
@@ -24,13 +20,13 @@ export async function GET(req){
   if(!sameOrigin(req))return fail('invalid_origin');
   const mode=req.nextUrl.searchParams.get('mode')||'home';
   if(mode==='home'){
-    const result=await getRecruiterHome().catch(()=>null);
+    const result=await getRecruiterHome(50).catch(()=>null);
     return result?NextResponse.json(result):fail('recruiter_home_unavailable');
   }
   if(mode==='requirement'){
     const jobId=req.nextUrl.searchParams.get('jobId')||'';
     if(!uuid(jobId))return fail('invalid_job');
-    const result=await getRecruiterRequirement(jobId).catch(()=>null);
+    const result=await getRecruiterRequirement(jobId,50).catch(()=>null);
     return result?NextResponse.json(result):fail('requirement_context_unavailable');
   }
   if(mode==='candidateSearch'){
@@ -51,27 +47,20 @@ export async function POST(req){
 
   if(action==='saveAssignment'){
     if(!uuid(body?.jobId)||!uuid(body?.recruiterUserId))return fail('invalid_assignment');
-    if(body?.blockerOwnerUserId&&!uuid(body.blockerOwnerUserId))return fail('invalid_blocker_owner');
     const result=await recruiterAction('saveAssignment',{
       jobId:body.jobId,recruiterUserId:body.recruiterUserId,
-      dailyTarget:body.dailyTarget,totalTarget:body.totalTarget,
-      requirementDailyTarget:body.requirementDailyTarget,requirementTotalTarget:body.requirementTotalTarget,
-      status:String(body.status||'ACTIVE').slice(0,30),
-      priority:String(body.priority||'NORMAL').slice(0,30),
-      managerInstructions:String(body.managerInstructions||'').slice(0,3000),
-      blockerType:String(body.blockerType||'').slice(0,120),
-      blockerReason:String(body.blockerReason||'').slice(0,1500),
-      blockerOwnerUserId:body.blockerOwnerUserId||''
+      dailyTarget:body.dailyTarget,totalTarget:body.totalTarget,status:String(body.status||'ACTIVE').slice(0,30),
+      priorityContext:String(body.priorityContext||'').slice(0,500),
+      managerInstructions:String(body.managerInstructions||'').slice(0,2000),
+      idempotencyKey:String(body.idempotencyKey||'').slice(0,160)
     }).catch(()=>null);
     if(!result?.ok)return fail(result?.error||'assignment_save_failed');
     return NextResponse.json(result);
   }
 
-  if(action==='setRequirementTargets'){
+  if(action==='setRequirementTarget'){
     if(!uuid(body?.jobId))return fail('invalid_job');
-    const result=await recruiterAction('setRequirementTargets',{
-      jobId:body.jobId,dailyTarget:body.dailyTarget,totalTarget:body.totalTarget
-    }).catch(()=>null);
+    const result=await recruiterAction('setRequirementTarget',{jobId:body.jobId,dailyTarget:body.dailyTarget,totalTarget:body.totalTarget}).catch(()=>null);
     if(!result?.ok)return fail(result?.error||'target_update_failed');
     return NextResponse.json(result);
   }
@@ -98,7 +87,7 @@ export async function POST(req){
     const result=await recruiterAction('saveTask',{task:{
       jobId:task.jobId,candidateId:task.candidateId||'',applicationId:task.applicationId||'',
       assignedUserId:task.assignedUserId||'',taskType:String(task.taskType||'FOLLOW_UP').slice(0,50),
-      title:String(task.title||'').slice(0,500),description:String(task.description||'').slice(0,3000),
+      title:String(task.title||'').slice(0,500),description:String(task.description||'').slice(0,2000),
       priority:String(task.priority||'NORMAL').slice(0,20),status:'OPEN',
       dueLocal:String(task.dueLocal||'').slice(0,40),idempotencyKey:String(task.idempotencyKey||'').slice(0,160)
     }}).catch(()=>null);
@@ -106,12 +95,11 @@ export async function POST(req){
     return NextResponse.json(result);
   }
 
-  if(action==='completeTask'){
+  if(action==='setTaskStatus'){
     if(!uuid(body?.taskId))return fail('invalid_task');
-    const result=await recruiterAction('completeTask',{taskId:body.taskId}).catch(()=>null);
+    const result=await recruiterAction('setTaskStatus',{taskId:body.taskId,status:String(body.status||'DONE').slice(0,30)}).catch(()=>null);
     if(!result?.ok)return fail(result?.error||'task_status_failed');
     return NextResponse.json(result);
   }
-
   return fail('unsupported_action');
 }
