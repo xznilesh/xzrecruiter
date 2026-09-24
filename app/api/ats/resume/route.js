@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { atsAction } from '@/lib/ats';
+import { recruiterAction } from '@/lib/recruiter';
 import { extractResumeText, parseResumeText } from '@/lib/resume-parser';
 import { storageConfigured, uploadPrivateObject } from '@/lib/server-storage';
 
@@ -37,6 +38,9 @@ export async function POST(req) {
   if (!(file instanceof File)) return NextResponse.json({ error: 'file_required' }, { status: 400 });
   if (!ALLOWED.has(file.type)) return NextResponse.json({ error: 'unsupported_file_type' }, { status: 415 });
   if (!file.size || file.size > MAX_BYTES) return NextResponse.json({ error: 'invalid_file_size' }, { status: 413 });
+
+  const access = await recruiterAction('candidateAccess', { candidateId }).catch(() => null);
+  if (!access?.ok || !access?.allowed) return NextResponse.json({ error: 'candidate_access_denied' }, { status: 403 });
 
   const bytes = Buffer.from(await file.arrayBuffer());
   const checksum = createHash('sha256').update(bytes).digest('hex');
