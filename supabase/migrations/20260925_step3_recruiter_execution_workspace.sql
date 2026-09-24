@@ -52,6 +52,7 @@ alter table public.applications add column if not exists source_reference text;
 alter table public.applications add column if not exists sourcing_notes text;
 alter table public.applications add column if not exists sourced_by_user_id uuid references public.users(id) on delete set null;
 alter table public.applications add column if not exists sourced_at timestamptz;
+alter table public.applications add column if not exists intake_idempotency_key text;
 
 alter table public.applications drop constraint if exists applications_source_type_check;
 alter table public.applications add constraint applications_source_type_check
@@ -63,6 +64,8 @@ create index if not exists idx_xzr_applications_recruiter_work
   on public.applications(agency_id,owner_user_id,job_id,stage_id,last_activity_at desc);
 create index if not exists idx_xzr_applications_source
   on public.applications(agency_id,job_id,source_type,sourced_at desc);
+create unique index if not exists uq_xzr_application_intake_idempotency
+  on public.applications(agency_id,intake_idempotency_key) where intake_idempotency_key is not null and archived_at is null;
 
 -- Reuse the existing CRM task engine for recruitment execution tasks.
 alter table public.crm_tasks add column if not exists job_id uuid references public.recruitment_jobs(id) on delete cascade;
@@ -225,6 +228,7 @@ begin
   from private.xzrecruiter_session_context(p_token);
   if v_agency is null then return jsonb_build_object('ok',false,'error','unauthorized'); end if;
   v_business_role:=private.xzrecruiter_step3_business_role(v_agency,v_user,v_membership_role);
+  v_timezone:=private.xzrecruiter_step3_timezone(v_agency,v_user);
   if v_business_role not in ('OWNER','ADMIN','RECRUITMENT_MANAGER','RECRUITER') then
     return jsonb_build_object('ok',false,'error','recruiter_workspace_forbidden');
   end if;
@@ -347,7 +351,8 @@ begin
     'today',jsonb_build_object(
       'daily_target',v_target,'valid_submissions_completed',v_done,
       'remaining_target',greatest(v_target-v_done,0),'jobs_requiring_attention',jsonb_array_length(v_requirements),
-      'due_followups',v_due_tasks,'screening_actions_due',v_screening
+      'due_followups',v_due_tasks,'screening_actions_due',v_screening,
+      'interview_actions',coalesce(jsonb_array_length(v_interviews),0)
     ),
     'requirements',v_requirements,'tasks',v_tasks,'interviews',v_interviews
   );
@@ -380,7 +385,8 @@ begin
     'workplace_type',j.workplace_type,'experience_min',j.experience_min,'experience_max',j.experience_max,
     'salary_min',j.salary_min,'salary_max',j.salary_max,'salary_currency',j.salary_currency,
     'salary_period',j.salary_period,'work_authorization_requirements',j.work_authorization_requirements,
-    'recruiter_ready',j.recruiter_ready,'requirement_state',j.requirement_state
+    'recruiter_ready',j.recruiter_ready,'requirement_state',j.requirement_state,
+    'submission_target_daily',j.submission_target_daily,'submission_target_total',j.submission_target_total
   ) into v_job
   from public.recruitment_jobs j
   left join public.recruitment_clients c on c.id=j.client_id and c.agency_id=v_agency
@@ -388,7 +394,7 @@ begin
 
   select jsonb_build_object(
     'id',hb.id,'version_number',hb.version_number,'hiring_brief',hb.hiring_brief,
-    'search_blueprint',hb.search_blueprint,'approved_at',hb.approved_at
+    'search_blueprint',hb.search_blueprint,'approved_at',hb.approved_at,'approval_note',hb.approval_note
   ) into v_brief
   from public.recruitment_jobs j
   join public.requirement_hiring_briefs hb on hb.id=j.approved_hiring_brief_id and hb.agency_id=v_agency
@@ -396,7 +402,7 @@ begin
 
   select coalesce(jsonb_agg(jsonb_build_object(
     'kind',c.criterion_kind,'label',c.label,'value',c.value_text,'evidence',c.evidence,
-    'am_confirmed',c.am_confirmed,'status',c.extraction_status
+    'amConfirmed',c.am_confirmed,'status',c.extraction_status
   ) order by c.sort_order),'[]'::jsonb)
   into v_criteria
   from public.requirement_criteria c
@@ -406,9 +412,9 @@ begin
 
   select coalesce(jsonb_agg(jsonb_build_object(
     'id',a.id,'recruiter_user_id',a.recruiter_user_id,'recruiter_name',u.display_name,
-    'daily_target',a.daily_submission_target,'priority',a.manager_priority,
-    'instructions',a.manager_instructions,'status',a.assignment_status,
-    'blocker_reason',a.blocker_reason,'blocker_owner_user_id',a.blocker_owner_user_id,
+    'daily_target',a.daily_submission_target,'total_target',a.total_submission_target,'priority',a.manager_priority,
+    'manager_instructions',a.manager_instructions,'assignment_status',a.assignment_status,
+    'blocker_type',a.blocker_type,'blocker_reason',a.blocker_reason,'blocker_owner_user_id',a.blocker_owner_user_id,
     'blocker_owner_name',bo.display_name,'assigned_at',a.assigned_at
   ) order by a.assigned_at),'[]'::jsonb)
   into v_assignment
@@ -438,7 +444,20 @@ begin
     select ap.id application_id,ap.candidate_id,ap.stage,coalesce(ps.code,ap.stage) stage_code,
       ap.source_type,ap.source_reference,ap.sourcing_notes,ap.sourced_at,ap.last_activity_at,
       c.full_name,c.current_title,c.current_company,c.city,c.country_code,c.email,c.phone,
-      exists(select 1 from public.candidate_documents d where d.agency_id=v_agency and d.candidate_id=c.id and d.archived_at is null and d.document_type='RESUME') has_resume
+      exists(select 1 from public.candidate_documents d where d.agency_id=v_agency and d.candidate_id=c.id and d.archived_at is null and d.document_type='RESUME') has_resume,
+      case
+        when upper(coalesce(ps.code,ap.stage,''))='SCREENING' then 'SCREENING_PENDING'
+        when upper(coalesce(ps.code,ap.stage,'')) in ('QUALIFIED','SHORTLISTED') then 'READY_FOR_NEXT_ACTION'
+        when upper(coalesce(ps.code,ap.stage,'')) in ('REJECTED','WITHDRAWN','PLACED','HIRED') then 'COMPLETED_NO_ACTION'
+        when upper(coalesce(ps.code,ap.stage,'')) in ('APPLIED','NEW') then 'NEW_WORK'
+        else 'SOURCING'
+      end queue_group,
+      private.xzrecruiter_canonical_candidacy_state(coalesce(ps.code,ap.stage)) canonical_state,
+      exists(
+        select 1 from public.crm_tasks bt
+        where bt.agency_id=v_agency and bt.application_id=ap.id and bt.archived_at is null
+          and bt.status in ('OPEN','IN_PROGRESS') and bt.task_type in ('MISSING_INFORMATION','MANAGER_CLARIFICATION')
+      ) blocked
     from public.applications ap
     join public.candidates c on c.id=ap.candidate_id and c.agency_id=v_agency
     left join public.pipeline_stages ps on ps.id=ap.stage_id and ps.agency_id=v_agency
@@ -451,7 +470,7 @@ begin
   into v_tasks
   from (
     select t.id,t.title,t.description,t.task_type,t.status,t.priority,t.due_at,t.candidate_id,t.application_id,
-      c.full_name candidate_name,t.created_at,t.completed_at
+      c.full_name candidate_name,t.created_at,t.completed_at,(t.due_at is not null and t.due_at<now()) overdue
     from public.crm_tasks t
     left join public.candidates c on c.id=t.candidate_id and c.agency_id=v_agency
     where t.agency_id=v_agency and t.job_id=p_job_id and t.archived_at is null
@@ -461,7 +480,7 @@ begin
 
   if v_business_role in ('OWNER','ADMIN','ACCOUNT_MANAGER','RECRUITMENT_MANAGER') then
     select coalesce(jsonb_agg(jsonb_build_object(
-      'user_id',m.user_id,'name',u.display_name,'business_role',private.xzrecruiter_business_role(m.agency_id,m.user_id,m.role)
+      'user_id',m.user_id,'display_name',coalesce(u.display_name,u.email),'business_role',private.xzrecruiter_business_role(m.agency_id,m.user_id,m.role)
     ) order by u.display_name),'[]'::jsonb)
     into v_members
     from public.agency_memberships m join public.users u on u.id=m.user_id
@@ -473,6 +492,19 @@ begin
     'ok',true,'business_role',v_business_role,'timezone',v_timezone,'business_date',v_today,
     'job',v_job,'brief',coalesce(v_brief,'{}'::jsonb),'criteria',coalesce(v_criteria,'[]'::jsonb),
     'assignments',coalesce(v_assignment,'[]'::jsonb),'eligible_recruiters',v_members,
+    'can_manage_assignments',v_business_role in ('OWNER','ADMIN','ACCOUNT_MANAGER','RECRUITMENT_MANAGER'),
+    'blockers',coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'blocker_type',coalesce(a.blocker_type,'EXPLICIT_BLOCKER'),
+        'reason',a.blocker_reason,
+        'owner',coalesce(bo.display_name,bo.email,'Unassigned')
+      ) order by a.updated_at desc)
+      from public.requirement_recruiter_assignments a
+      left join public.users bo on bo.id=a.blocker_owner_user_id
+      where a.agency_id=v_agency and a.job_id=p_job_id and a.assignment_status='ACTIVE'
+        and a.blocker_reason is not null
+        and (v_business_role<>'RECRUITER' or a.recruiter_user_id=v_user)
+    ),'[]'::jsonb),
     'execution',jsonb_build_object(
       'daily_target',v_target,'valid_submissions_today',v_valid,'remaining_target',greatest(v_target-v_valid,0),
       'progress',case when v_target=0 then 0 else least(100,round(v_valid*100.0/v_target)) end
@@ -501,7 +533,7 @@ begin
 
   select coalesce(jsonb_agg(to_jsonb(x) order by x.updated_at desc),'[]'::jsonb) into v_rows
   from (
-    select c.id,c.full_name,c.current_title,c.current_company,c.city,c.country_code,c.availability_status,c.updated_at,
+    select c.id,c.full_name,c.email,c.phone,c.current_title,c.current_company,c.city,c.country_code,c.availability_status,c.updated_at,
       exists(select 1 from public.applications ap where ap.agency_id=v_agency and ap.job_id=p_job_id and ap.candidate_id=c.id and ap.archived_at is null) already_on_requirement
     from public.candidates c
     where c.agency_id=v_agency and c.archived_at is null and c.merged_into_candidate_id is null
@@ -625,7 +657,7 @@ set search_path='public','private','extensions','pg_temp'
 as $fn$
 declare
   v_agency uuid;v_user uuid;v_membership_role text;v_business_role text;
-  v_id uuid;v_job uuid;v_candidate uuid;v_application uuid;v_assigned uuid;v_type text;v_title text;v_status text;v_priority text;v_key text;
+  v_id uuid;v_job uuid;v_candidate uuid;v_application uuid;v_assigned uuid;v_type text;v_title text;v_status text;v_priority text;v_key text;v_timezone text;
 begin
   select agency_id,user_id,role into v_agency,v_user,v_membership_role
   from private.xzrecruiter_session_context(p_token);
@@ -653,6 +685,8 @@ begin
       return jsonb_build_object('ok',false,'error','requirement_access_denied'); end if;
   elsif not exists(select 1 from public.agency_memberships m where m.agency_id=v_agency and m.user_id=v_assigned) then
     return jsonb_build_object('ok',false,'error','invalid_assignee');
+  elsif v_assigned<>v_user and not private.xzrecruiter_is_assigned_recruiter(v_agency,v_assigned,v_job) then
+    return jsonb_build_object('ok',false,'error','assignee_not_assigned_to_requirement');
   end if;
 
   if v_candidate is not null and not exists(select 1 from public.candidates c where c.id=v_candidate and c.agency_id=v_agency and c.archived_at is null) then
@@ -671,7 +705,11 @@ begin
     job_id,candidate_id,application_id,task_type,idempotency_key
   ) values(
     v_id,v_agency,v_title,nullif(p_task->>'description',''),v_status,v_priority,
-    nullif(p_task->>'dueAt','')::timestamptz,v_assigned,v_user,v_job,v_candidate,v_application,v_type,v_key
+    case
+      when nullif(p_task->>'dueAt','') is not null then (p_task->>'dueAt')::timestamptz
+      when nullif(p_task->>'dueLocal','') is not null then (p_task->>'dueLocal')::timestamp at time zone v_timezone
+      else null
+    end,v_assigned,v_user,v_job,v_candidate,v_application,v_type,v_key
   );
   perform private.xzrecruiter_log_activity(v_agency,v_user,'crm_task',v_id,'followup.created','Recruiter execution task created',
     jsonb_build_object('job_id',v_job,'candidate_id',v_candidate,'application_id',v_application,'task_type',v_type,'assigned_user_id',v_assigned));
@@ -862,3 +900,71 @@ grant execute on function public.xzrecruiter_candidate_document_access(text,uuid
 
 -- The earlier positional assignment mutation is retained only for migration compatibility, not as a browser API.
 revoke execute on function public.xzrecruiter_assign_requirement(text,uuid,uuid,integer,text,text,text,text,uuid) from anon,authenticated;
+
+
+create or replace function public.xzrecruiter_set_requirement_targets(
+  p_token text,p_job_id uuid,p_daily_target integer,p_total_target integer
+) returns jsonb
+language plpgsql security definer
+set search_path='public','private','extensions','pg_temp'
+as $fn$
+declare v_agency uuid;v_user uuid;v_membership_role text;v_business_role text;
+begin
+  select agency_id,user_id,role into v_agency,v_user,v_membership_role from private.xzrecruiter_session_context(p_token);
+  if v_agency is null then return jsonb_build_object('ok',false,'error','unauthorized'); end if;
+  v_business_role:=private.xzrecruiter_step3_business_role(v_agency,v_user,v_membership_role);
+  if v_business_role not in ('OWNER','ADMIN','ACCOUNT_MANAGER','RECRUITMENT_MANAGER') then return jsonb_build_object('ok',false,'error','target_update_forbidden'); end if;
+  if coalesce(p_daily_target,0)<0 or coalesce(p_daily_target,0)>1000 or coalesce(p_total_target,0)<0 or coalesce(p_total_target,0)>10000 then return jsonb_build_object('ok',false,'error','invalid_target'); end if;
+  update public.recruitment_jobs
+  set submission_target_daily=coalesce(p_daily_target,0),submission_target_total=coalesce(p_total_target,0),updated_at=now()
+  where id=p_job_id and agency_id=v_agency and archived_at is null and recruiter_ready=true and requirement_state='OPEN';
+  if not found then return jsonb_build_object('ok',false,'error','requirement_not_recruiter_ready'); end if;
+  perform private.xzrecruiter_log_activity(v_agency,v_user,'job',p_job_id,'requirement.target_updated','Requirement submission targets updated',
+    jsonb_build_object('daily_target',coalesce(p_daily_target,0),'total_target',coalesce(p_total_target,0)));
+  return jsonb_build_object('ok',true,'daily_target',coalesce(p_daily_target,0),'total_target',coalesce(p_total_target,0));
+end;
+$fn$;
+
+create or replace function public.xzrecruiter_recruiter_intake_candidate(
+  p_token text,p_job_id uuid,p_candidate jsonb,p_source_type text,p_source_reference text,
+  p_sourcing_notes text,p_idempotency_key text
+) returns jsonb
+language plpgsql security definer
+set search_path='public','private','extensions','pg_temp'
+as $fn$
+declare v_agency uuid;v_user uuid;v_role text;v_key text:=nullif(left(btrim(coalesce(p_idempotency_key,'')),160),'');v_existing_app uuid;v_candidate_id uuid;v_result jsonb;v_existing_candidate uuid;
+begin
+  select agency_id,user_id,role into v_agency,v_user,v_role from private.xzrecruiter_session_context(p_token);
+  if v_agency is null then return jsonb_build_object('ok',false,'error','unauthorized'); end if;
+  if v_key is not null then
+    perform pg_advisory_xact_lock(hashtext(v_agency::text||'|'||v_key));
+    select id,candidate_id into v_existing_app,v_candidate_id
+    from public.applications where agency_id=v_agency and intake_idempotency_key=v_key and archived_at is null limit 1;
+    if v_existing_app is not null then
+      return jsonb_build_object('ok',true,'candidate_id',v_candidate_id,'application_id',v_existing_app,'reused',true,'idempotent_replay',true);
+    end if;
+  end if;
+  begin v_existing_candidate:=nullif(p_candidate->>'id','')::uuid; exception when others then v_existing_candidate:=null; end;
+  v_result:=public.xzrecruiter_source_candidate(
+    p_token,p_job_id,p_candidate,v_existing_candidate,p_source_type,p_source_reference,p_sourcing_notes
+  );
+  if coalesce((v_result->>'ok')::boolean,false)=false then return v_result; end if;
+  if v_key is not null then
+    update public.applications set intake_idempotency_key=v_key
+    where id=(v_result->>'application_id')::uuid and agency_id=v_agency and intake_idempotency_key is null;
+  end if;
+  return v_result||jsonb_build_object('idempotent_replay',false);
+exception when unique_violation then
+  if v_key is not null then
+    select id,candidate_id into v_existing_app,v_candidate_id
+    from public.applications where agency_id=v_agency and intake_idempotency_key=v_key and archived_at is null limit 1;
+    if v_existing_app is not null then return jsonb_build_object('ok',true,'candidate_id',v_candidate_id,'application_id',v_existing_app,'reused',true,'idempotent_replay',true); end if;
+  end if;
+  return jsonb_build_object('ok',false,'error','candidate_intake_conflict');
+end;
+$fn$;
+
+revoke all on function public.xzrecruiter_set_requirement_targets(text,uuid,integer,integer) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_recruiter_intake_candidate(text,uuid,jsonb,text,text,text,text) from public,anon,authenticated;
+grant execute on function public.xzrecruiter_set_requirement_targets(text,uuid,integer,integer) to anon,authenticated;
+grant execute on function public.xzrecruiter_recruiter_intake_candidate(text,uuid,jsonb,text,text,text,text) to anon,authenticated;
