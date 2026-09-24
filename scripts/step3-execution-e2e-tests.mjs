@@ -37,6 +37,8 @@ assert.equal(remainingTarget(state.target,state.valid),0);
 for(const required of ['Daily submission target','Valid submissions','Remaining','Due follow-ups','Screening actions','My priority requirements']){
   assert.ok(center.includes(required),'command center missing '+required);
 }
+assert.ok(workspace.includes('Select source'),'candidate intake must require explicit source selection');
+assert.ok(workspace.includes('!intake.sourceType'),'unknown source must not silently default to an external platform');
 for(const required of ['Source candidate','Search internal talent','Reuse','Create follow-up / task','Execution blockers','Work queue']){
   assert.ok(workspace.includes(required),'requirement workspace missing '+required);
 }
