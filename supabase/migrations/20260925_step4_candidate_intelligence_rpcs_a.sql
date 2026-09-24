@@ -174,7 +174,7 @@ begin
 
   select to_jsonb(x) into v_match from (
     select m.id,m.score,m.match_band,m.confidence,m.coverage,m.hard_rule_status,m.component_scores,m.hard_rule_results,
-      m.strengths,m.gaps,m.uncertainties,m.evidence_meta,m.recommendation,m.brief_id,m.brief_version,
+      m.requirement_results,m.strengths,m.gaps,m.uncertainties,m.evidence_meta,m.recommendation,m.brief_id,m.brief_version,
       m.profile_version_id,m.scoring_version,m.model_name,m.prompt_version,m.schema_version,m.generated_at,m.run_status,
       a.intelligence_review_state,a.intelligence_reviewed_at
     from public.candidate_match_runs m
