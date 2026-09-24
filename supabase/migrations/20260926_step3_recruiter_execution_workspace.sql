@@ -452,7 +452,7 @@ begin
     'experience_min',j.experience_min,'experience_max',j.experience_max,'work_authorization_requirements',j.work_authorization_requirements,
     'requirement_state',j.requirement_state,'recruiter_ready',j.recruiter_ready,
     'daily_submission_target',j.daily_submission_target,'approved_hiring_brief_id',j.approved_hiring_brief_id
-  ),j.approved_hiring_brief_id
+  )
   into v_job
   from public.recruitment_jobs j
   left join public.recruitment_clients c on c.id=j.client_id and c.agency_id=v_agency
@@ -973,3 +973,124 @@ grant execute on function public.xzrecruiter_recruiter_candidate_search(text,uui
 grant execute on function public.xzrecruiter_recruiter_intake_candidate(text,uuid,jsonb,text,text,text,text) to anon,authenticated;
 grant execute on function public.xzrecruiter_save_execution_task(text,jsonb) to anon,authenticated;
 grant execute on function public.xzrecruiter_set_execution_task_status(text,uuid,text) to anon,authenticated;
+
+
+create or replace function public.xzrecruiter_prepare_execution_resume(
+  p_token text,p_job_id uuid,p_candidate_id uuid,p_filename text,p_mime_type text,p_size_bytes bigint,p_checksum text
+) returns jsonb
+language plpgsql
+security definer
+set search_path='public','private','extensions','pg_temp'
+as $fn$
+declare
+  v_agency uuid;v_user uuid;v_membership_role text;v_business_role text;v_doc uuid;v_run uuid;v_version integer;v_path text;v_existing uuid;
+begin
+  select agency_id,user_id,role into v_agency,v_user,v_membership_role
+  from private.xzrecruiter_session_context(p_token);
+  if v_agency is null then return jsonb_build_object('ok',false,'error','unauthorized'); end if;
+  v_business_role:=private.xzrecruiter_business_role(v_agency,v_user,v_membership_role);
+  if v_business_role not in ('OWNER','ADMIN','RECRUITMENT_MANAGER','RECRUITER') then
+    return jsonb_build_object('ok',false,'error','resume_upload_forbidden');
+  end if;
+  if not private.xzrecruiter_recruiter_job_access(v_agency,v_user,v_business_role,p_job_id) then
+    return jsonb_build_object('ok',false,'error','requirement_access_forbidden');
+  end if;
+  if not exists(
+    select 1 from public.applications a
+    where a.agency_id=v_agency and a.job_id=p_job_id and a.candidate_id=p_candidate_id and a.archived_at is null
+      and (v_business_role<>'RECRUITER' or a.owner_user_id=v_user)
+  ) then return jsonb_build_object('ok',false,'error','candidate_access_forbidden'); end if;
+  if coalesce(p_size_bytes,0)<=0 or p_size_bytes>8388608 then return jsonb_build_object('ok',false,'error','invalid_file_size'); end if;
+  if p_mime_type not in ('application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document','text/plain') then
+    return jsonb_build_object('ok',false,'error','unsupported_file_type');
+  end if;
+
+  select id into v_existing
+  from public.candidate_documents
+  where agency_id=v_agency and candidate_id=p_candidate_id and document_type='RESUME'
+    and checksum=p_checksum and archived_at is null
+  order by version_number desc limit 1;
+  if v_existing is not null then
+    select id into v_run from public.candidate_parse_runs
+    where agency_id=v_agency and candidate_id=p_candidate_id and document_id=v_existing
+    order by created_at desc limit 1;
+    return jsonb_build_object('ok',true,'document_id',v_existing,'parse_run_id',v_run,'reused',true);
+  end if;
+
+  select coalesce(max(version_number),0)+1 into v_version
+  from public.candidate_documents
+  where agency_id=v_agency and candidate_id=p_candidate_id and document_type='RESUME';
+
+  v_doc:=gen_random_uuid();
+  v_run:=gen_random_uuid();
+  v_path:='candidates/'||v_agency::text||'/'||p_candidate_id::text||'/resume/'||v_doc::text||'/'||
+    regexp_replace(coalesce(nullif(p_filename,''),'resume'),'[^A-Za-z0-9._-]+','_','g');
+
+  update public.candidate_documents
+  set is_primary=false
+  where agency_id=v_agency and candidate_id=p_candidate_id and document_type='RESUME' and is_primary=true;
+
+  insert into public.candidate_documents(
+    id,agency_id,candidate_id,document_type,version_number,filename,storage_path,mime_type,size_bytes,checksum,is_primary,uploaded_by_user_id
+  ) values(
+    v_doc,v_agency,p_candidate_id,'RESUME',v_version,coalesce(nullif(p_filename,''),'resume'),v_path,p_mime_type,p_size_bytes,p_checksum,true,v_user
+  );
+  insert into public.candidate_parse_runs(
+    id,agency_id,candidate_id,document_id,provider,parser_version,status,review_state
+  ) values(v_run,v_agency,p_candidate_id,v_doc,'LOCAL','step3-existing-parser','PENDING','NEEDS_REVIEW');
+
+  perform private.xzrecruiter_log_activity(
+    v_agency,v_user,'candidate',p_candidate_id,'candidate.resume_uploaded','Resume uploaded for sourced candidate',
+    jsonb_build_object('job_id',p_job_id,'document_id',v_doc,'version',v_version)
+  );
+  return jsonb_build_object('ok',true,'document_id',v_doc,'parse_run_id',v_run,'version_number',v_version,'storage_path',v_path,'reused',false);
+end;
+$fn$;
+
+create or replace function public.xzrecruiter_finalize_execution_resume(
+  p_token text,p_job_id uuid,p_parse_run_id uuid,p_extracted_data jsonb,p_field_confidence jsonb,p_field_evidence jsonb,p_error text default null
+) returns jsonb
+language plpgsql
+security definer
+set search_path='public','private','extensions','pg_temp'
+as $fn$
+declare
+  v_agency uuid;v_user uuid;v_membership_role text;v_business_role text;v_candidate uuid;
+begin
+  select agency_id,user_id,role into v_agency,v_user,v_membership_role
+  from private.xzrecruiter_session_context(p_token);
+  if v_agency is null then return jsonb_build_object('ok',false,'error','unauthorized'); end if;
+  v_business_role:=private.xzrecruiter_business_role(v_agency,v_user,v_membership_role);
+  if v_business_role not in ('OWNER','ADMIN','RECRUITMENT_MANAGER','RECRUITER') then
+    return jsonb_build_object('ok',false,'error','resume_upload_forbidden');
+  end if;
+  if not private.xzrecruiter_recruiter_job_access(v_agency,v_user,v_business_role,p_job_id) then
+    return jsonb_build_object('ok',false,'error','requirement_access_forbidden');
+  end if;
+
+  select candidate_id into v_candidate
+  from public.candidate_parse_runs
+  where id=p_parse_run_id and agency_id=v_agency;
+  if v_candidate is null then return jsonb_build_object('ok',false,'error','parse_run_not_found'); end if;
+  if not exists(
+    select 1 from public.applications a
+    where a.agency_id=v_agency and a.job_id=p_job_id and a.candidate_id=v_candidate and a.archived_at is null
+      and (v_business_role<>'RECRUITER' or a.owner_user_id=v_user)
+  ) then return jsonb_build_object('ok',false,'error','candidate_access_forbidden'); end if;
+
+  update public.candidate_parse_runs
+  set status=case when p_error is null then 'SUCCEEDED' else 'FAILED' end,
+      extracted_data=case when p_error is null then coalesce(p_extracted_data,'{}'::jsonb) else extracted_data end,
+      field_confidence=case when p_error is null then coalesce(p_field_confidence,'{}'::jsonb) else field_confidence end,
+      field_evidence=case when p_error is null then coalesce(p_field_evidence,'{}'::jsonb) else field_evidence end,
+      error_message=nullif(left(coalesce(p_error,''),500),''),
+      updated_at=now()
+  where id=p_parse_run_id and agency_id=v_agency;
+  return jsonb_build_object('ok',true,'status',case when p_error is null then 'SUCCEEDED' else 'FAILED' end);
+end;
+$fn$;
+
+revoke all on function public.xzrecruiter_prepare_execution_resume(text,uuid,uuid,text,text,bigint,text) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_finalize_execution_resume(text,uuid,uuid,jsonb,jsonb,jsonb,text) from public,anon,authenticated;
+grant execute on function public.xzrecruiter_prepare_execution_resume(text,uuid,uuid,text,text,bigint,text) to anon,authenticated;
+grant execute on function public.xzrecruiter_finalize_execution_resume(text,uuid,uuid,jsonb,jsonb,jsonb,text) to anon,authenticated;
