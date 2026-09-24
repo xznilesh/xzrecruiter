@@ -286,6 +286,8 @@ begin
     select ra.*,j.title,j.client_id,j.priority,j.openings,j.target_fill_date,j.status,j.requirement_state,
       j.daily_submission_target,j.opened_at,j.approved_hiring_brief_id,
       c.name account_name,
+      hb.hiring_brief->>'roleSummary' brief_summary,
+      coalesce(hb.hiring_brief->'mustHaveCriteria','[]'::jsonb) must_haves,
       coalesce((
         select count(distinct cs.application_id)
         from public.candidate_submissions cs
@@ -321,6 +323,7 @@ begin
     from public.requirement_recruiter_assignments ra
     join public.recruitment_jobs j on j.id=ra.job_id and j.agency_id=v_agency and j.archived_at is null
     left join public.recruitment_clients c on c.id=j.client_id and c.agency_id=v_agency
+    left join public.requirement_hiring_briefs hb on hb.id=j.approved_hiring_brief_id and hb.agency_id=v_agency and hb.brief_status='APPROVED'
     where ra.agency_id=v_agency
       and ra.assignment_status='ACTIVE'
       and j.approved_hiring_brief_id is not null
@@ -358,7 +361,11 @@ begin
     select id assignment_id,job_id,recruiter_user_id,title,account_name,priority,openings,target_fill_date,status,
       requirement_state,daily_submission_target requirement_daily_target,daily_target assigned_daily_target,
       valid_submissions_today,remaining_target,overdue_tasks,screening_pending,blocker_count,age_hours,priority_score,
-      priority_context,manager_instructions
+      priority_context,manager_instructions,brief_summary,must_haves,
+      coalesce((
+        select count(*) from public.applications a
+        where a.agency_id=v_agency and a.job_id=scored.job_id and a.owner_user_id=scored.recruiter_user_id and a.archived_at is null
+      ),0)::integer pipeline_candidates
     from scored
     order by priority_score desc,remaining_target desc,title asc
     limit v_limit
