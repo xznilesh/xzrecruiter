@@ -29,6 +29,7 @@ export default function RecruiterRequirementWorkspace({initialContext,jobId}){
  const[intake,setIntake]=useState({candidateId:'',fullName:'',email:'',phone:'',currentTitle:'',currentCompany:'',sourceType:'LINKEDIN',sourceReference:'',sourcingNotes:''});
  const[resume,setResume]=useState(null);
  const[search,setSearch]=useState('');const[searchRows,setSearchRows]=useState([]);const[searching,setSearching]=useState(false);
+ const intakeKeyRef=useRef(uid());const taskKeyRef=useRef(uid());const assignmentKeyRef=useRef(uid());
  const[task,setTask]=useState({taskType:'FOLLOW_UP',title:'Follow up with candidate',dueLocal:'',priority:'NORMAL',candidateId:'',applicationId:'',description:''});
  const[assignment,setAssignment]=useState({recruiterUserId:'',dailyTarget:'1',status:'ACTIVE',priorityContext:'',managerInstructions:''});
  const[requirementTarget,setRequirementTarget]=useState(String(initialContext?.job?.daily_submission_target||0));
@@ -78,9 +79,9 @@ export default function RecruiterRequirementWorkspace({initialContext,jobId}){
  async function intakeCandidate(){
    setState('saving');setMessage('');
    try{
-     const data=await post({action:'intakeCandidate',jobId,candidate:intake.candidateId?{id:intake.candidateId}:{fullName:intake.fullName,email:intake.email,phone:intake.phone,currentTitle:intake.currentTitle,currentCompany:intake.currentCompany},sourceType:intake.sourceType,sourceReference:intake.sourceReference,sourcingNotes:intake.sourcingNotes,idempotencyKey:uid()});
+     const data=await post({action:'intakeCandidate',jobId,candidate:intake.candidateId?{id:intake.candidateId}:{fullName:intake.fullName,email:intake.email,phone:intake.phone,currentTitle:intake.currentTitle,currentCompany:intake.currentCompany},sourceType:intake.sourceType,sourceReference:intake.sourceReference,sourcingNotes:intake.sourcingNotes,idempotencyKey:intakeKeyRef.current});
      if(resume)await uploadResume(data.candidate_id);
-     setIntakeOpen(false);setResume(null);if(fileRef.current)fileRef.current.value='';
+     setIntakeOpen(false);setResume(null);intakeKeyRef.current=uid();if(fileRef.current)fileRef.current.value='';
      setIntake({candidateId:'',fullName:'',email:'',phone:'',currentTitle:'',currentCompany:'',sourceType:'LINKEDIN',sourceReference:'',sourcingNotes:''});
      await refresh();setState('saved');setMessage(data.already_associated?'Candidate was already on this requirement; existing candidacy reused.':data.reused?'Existing candidate reused and associated with this requirement.':'Candidate sourced and added to the requirement.');
    }catch(e){setState('error');setMessage(e.message==='duplicate_requires_manager'?'A duplicate exists but is outside your authorized candidate scope. Ask a manager to review/reassign it.':e.message)}
@@ -94,7 +95,7 @@ export default function RecruiterRequirementWorkspace({initialContext,jobId}){
  async function createTask(){
    setState('saving');setMessage('');
    try{
-     await post({action:'saveTask',task:{...task,jobId,idempotencyKey:uid()}});
+     await post({action:'saveTask',task:{...task,jobId,idempotencyKey:taskKeyRef.current}});taskKeyRef.current=uid();
      await refresh();setState('saved');setMessage('Execution task created.');
    }catch(e){setState('error');setMessage(e.message)}
  }
@@ -108,7 +109,7 @@ export default function RecruiterRequirementWorkspace({initialContext,jobId}){
  async function saveAssignment(){
    setState('saving');setMessage('');
    try{
-     await post({action:'saveAssignment',jobId,...assignment,idempotencyKey:uid()});
+     await post({action:'saveAssignment',jobId,...assignment,idempotencyKey:assignmentKeyRef.current});assignmentKeyRef.current=uid();
      await refresh();setState('saved');setMessage('Recruiter assignment saved.');
    }catch(e){setState('error');setMessage(e.message)}
  }
