@@ -299,6 +299,11 @@ begin
       ),0)::integer valid_submissions_today,
       coalesce((
         select count(*)
+        from public.applications ap
+        where ap.agency_id=v_agency and ap.job_id=j.id and ap.owner_user_id=ra.recruiter_user_id and ap.archived_at is null
+      ),0)::integer pipeline_candidates,
+      coalesce((
+        select count(*)
         from public.crm_tasks t
         where t.agency_id=v_agency and t.job_id=j.id and t.assigned_user_id=ra.recruiter_user_id
           and t.archived_at is null and t.status in ('OPEN','IN_PROGRESS')
@@ -347,6 +352,7 @@ begin
             else 0
           end
         + least(5,floor(a.age_hours/24.0))::integer
+        + least(5,a.pipeline_candidates)
         - case when a.blocker_count>0 or a.status='ON_HOLD' then 2 else 0 end
       )::integer priority_score
     from assigned a
@@ -361,11 +367,7 @@ begin
     select id assignment_id,job_id,recruiter_user_id,title,account_name,priority,openings,target_fill_date,status,
       requirement_state,daily_submission_target requirement_daily_target,daily_target assigned_daily_target,
       valid_submissions_today,remaining_target,overdue_tasks,screening_pending,blocker_count,age_hours,priority_score,
-      priority_context,manager_instructions,brief_summary,must_haves,
-      coalesce((
-        select count(*) from public.applications a
-        where a.agency_id=v_agency and a.job_id=scored.job_id and a.owner_user_id=scored.recruiter_user_id and a.archived_at is null
-      ),0)::integer pipeline_candidates
+      priority_context,manager_instructions,brief_summary,must_haves,pipeline_candidates
     from scored
     order by priority_score desc,remaining_target desc,title asc
     limit v_limit
