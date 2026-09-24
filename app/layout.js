@@ -3,6 +3,7 @@ import './foundation.css';
 import './step2.css';
 import './step2-jd-brain.css';
 import './step3.css';
+import './step3-recruiter-execution.css';
 import './step3-extra.css';
 import './step4.css';
 import './step4-closeout.css';
