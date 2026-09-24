@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { recruiterAction } from '@/lib/recruiter';
-import { atsAction } from '@/lib/ats';
 import { extractResumeText,parseResumeText } from '@/lib/resume-parser';
 import { storageConfigured,uploadPrivateObject } from '@/lib/server-storage';
 
@@ -27,21 +26,18 @@ export async function POST(req){
   if(!ALLOWED.has(file.type))return NextResponse.json({error:'unsupported_file_type'},{status:415});
   if(!file.size||file.size>MAX_BYTES)return NextResponse.json({error:'invalid_file_size'},{status:413});
 
-  const access=await recruiterAction('candidateAccess',{candidateId}).catch(()=>null);
-  if(!access?.ok||!access?.allowed)return NextResponse.json({error:'candidate_access_denied'},{status:403});
-
   const bytes=Buffer.from(await file.arrayBuffer());
   const checksum=createHash('sha256').update(bytes).digest('hex');
-  const prepared=await atsAction('prepareResumeUpload',{
-    candidateId,filename:file.name||'resume',mimeType:file.type,sizeBytes:file.size,checksum
+  const prepared=await recruiterAction('prepareResume',{
+    jobId,candidateId,filename:file.name||'resume',mimeType:file.type,sizeBytes:file.size,checksum
   }).catch(()=>null);
-  if(!prepared?.ok)return NextResponse.json(prepared||{error:'resume_prepare_failed'},{status:prepared?.error==='forbidden'?403:400});
+  if(!prepared?.ok)return NextResponse.json(prepared||{error:'resume_prepare_failed'},{status:['resume_upload_forbidden','requirement_access_forbidden','candidate_access_forbidden'].includes(prepared?.error)?403:400});
   if(prepared.reused)return NextResponse.json({ok:true,reused:true,documentId:prepared.document_id,parseRunId:prepared.parse_run_id});
 
   try{
     await uploadPrivateObject(prepared.storage_path,bytes,file.type);
   }catch(error){
-    await atsAction('finalizeResumeParse',{parseRunId:prepared.parse_run_id,extractedData:{},fieldConfidence:{},fieldEvidence:{},error:'storage_upload_failed'}).catch(()=>null);
+    await recruiterAction('finalizeResume',{jobId,parseRunId:prepared.parse_run_id,extractedData:{},fieldConfidence:{},fieldEvidence:{},error:'storage_upload_failed'}).catch(()=>null);
     console.error('recruiter_resume_storage_failed',error?.message||'');
     return NextResponse.json({error:'storage_upload_failed'},{status:503});
   }
@@ -50,14 +46,14 @@ export async function POST(req){
     const text=await extractResumeText(bytes,file.type,file.name);
     if(!text||text.length<20)throw new Error('resume_text_empty');
     const parsed=parseResumeText(text);
-    const finalized=await atsAction('finalizeResumeParse',{
-      parseRunId:prepared.parse_run_id,extractedData:parsed.extractedData,
+    const finalized=await recruiterAction('finalizeResume',{
+      jobId,parseRunId:prepared.parse_run_id,extractedData:parsed.extractedData,
       fieldConfidence:parsed.fieldConfidence,fieldEvidence:parsed.fieldEvidence,error:null
     });
     if(!finalized?.ok)return NextResponse.json(finalized,{status:400});
     return NextResponse.json({ok:true,reused:false,documentId:prepared.document_id,parseRunId:prepared.parse_run_id,versionNumber:prepared.version_number});
   }catch(error){
-    await atsAction('finalizeResumeParse',{parseRunId:prepared.parse_run_id,error:error?.message||'parse_failed'}).catch(()=>null);
+    await recruiterAction('finalizeResume',{jobId,parseRunId:prepared.parse_run_id,extractedData:{},fieldConfidence:{},fieldEvidence:{},error:error?.message||'parse_failed'}).catch(()=>null);
     console.error('recruiter_resume_parse_failed',error?.message||'');
     return NextResponse.json({error:'resume_parse_failed'},{status:422});
   }
