@@ -52,6 +52,7 @@ export default function CandidateIntelligenceWorkspace({initialContext,jobId,can
   const candidate=ctx.candidate||{};
   const job=ctx.job||{};
   const match=ctx.match||{};
+  const analysisJob=ctx.analysis_job||{};
   const profile=ctx.profile||{};
   const source=ctx.source||{};
   const history=list(ctx.history);
@@ -108,11 +109,13 @@ export default function CandidateIntelligenceWorkspace({initialContext,jobId,can
       </div>
       <div className="ci-header-actions">
         <a className="ghost-action" href={'/recruiter/requirements/'+jobId}>← Requirement</a>
-        <button className="primary-action" onClick={analyze} disabled={state==='analyzing'}>{state==='analyzing'?'Analyzing…':isCurrent?'Recompute intelligence':'Generate intelligence'}</button>
+        <button className="primary-action" onClick={analyze} disabled={state==='analyzing'||analysisJob.run_status==='PROCESSING'}>{state==='analyzing'||analysisJob.run_status==='PROCESSING'?'Analyzing…':isCurrent?'Recompute intelligence':'Generate intelligence'}</button>
       </div>
     </section>
 
     {!aiConfigured?<div className="ci-notice"><b>AI enrichment is not configured.</b><span>Deterministic matching still works from recruiter/profile/local parser evidence; unknown fields remain unknown rather than invented.</span></div>:null}
+    {analysisJob.run_status==='PROCESSING'?<div className="ci-notice"><b>Candidate intelligence is processing.</b><span>Attempt {analysisJob.attempt_count||1}; refresh is safe and duplicate requests reuse the same job.</span></div>:null}
+    {analysisJob.run_status==='FAILED'?<div className="ci-notice"><b>Last intelligence run failed.</b><span>{pretty(analysisJob.error_code||'PROCESSING_ERROR')} · retry count {analysisJob.retry_count||0}. No failed result is treated as current intelligence.</span></div>:null}
     {match.run_status==='STALE'?<div className="ci-notice"><b>Previous intelligence is stale.</b><span>Candidate, resume, approved requirement or scoring configuration changed. History is preserved; recompute before relying on it.</span></div>:null}
 
     <section className="ci-overview">
@@ -173,6 +176,8 @@ export default function CandidateIntelligenceWorkspace({initialContext,jobId,can
           <div><dt>Availability</dt><dd>{pretty(profile?.availability?.status?.normalized||candidate.availability_status||'UNKNOWN')}</dd></div>
           <div><dt>Work model</dt><dd>{pretty(profile?.workContext?.workplacePreference?.normalized||candidate.workplace_preference||'UNKNOWN')}</dd></div>
           <div><dt>Resume version</dt><dd>{profile?.source?.documentVersion?('v'+profile.source.documentVersion):'No versioned resume'}</dd></div>
+          <div><dt>Resume uploaded</dt><dd>{when(profile?.source?.documentCreatedAt)}</dd></div>
+          <div><dt>Parse status</dt><dd>{pretty(profile?.source?.parseStatus||'UNKNOWN')}</dd></div>
           <div><dt>Parser version</dt><dd>{profile?.source?.parserVersion||'Not recorded'}</dd></div>
           <div><dt>Match model</dt><dd>{match.model_name||'Deterministic/local evidence'}</dd></div>
           <div><dt>Match generated</dt><dd>{when(match.generated_at)}</dd></div>
