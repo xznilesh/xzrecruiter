@@ -14,5 +14,6 @@ assert.ok(center.includes('Open role →'));
 assert.ok(workspace.includes('＋ Source candidate'));
 assert.ok(workspace.includes('rx-queue-tabs'));
 assert.ok(shell.includes("label: 'My Work'"));
-assert.ok(!workspace.includes('/candidates/'),'recruiter critical path should not escape into legacy candidate pages');
+assert.ok(!/href=\{?['\"]\/candidates\//.test(workspace),'recruiter critical path should not escape into legacy candidate pages');
+assert.ok(workspace.includes("'/recruiter/requirements/'")&&workspace.includes("'/candidates/'")&&workspace.includes("'/intelligence'"),'Step-4 candidate intelligence route must remain inside recruiter execution flow');
 console.log('STEP3_EXECUTION_RESPONSIVE_PASS desktop=true tablet=true mobile=true critical_actions=true no_dead_legacy_link=true');
