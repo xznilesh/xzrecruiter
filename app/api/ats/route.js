@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { atsAction } from '@/lib/ats';
+import { getRecruiterHome } from '@/lib/recruiter';
 
 function sameOrigin(req) {
   const origin = req.headers.get('origin');
@@ -21,7 +22,20 @@ export async function POST(req) {
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: 'Invalid request.' }, { status: 400 }); }
   try {
-    const result = await atsAction(String(body.action || ''), body.payload || {});
+    const action=String(body.action||'');
+    const protectedForRecruiter=new Set([
+      'saveJob','updateJobProfile','bulkJobAction',
+      'saveCandidate','updateCandidateProfile','archiveCandidate','mergeCandidates','bulkCandidateAction',
+      'candidateExport','portalAccess','prepareResumeUpload','applyResumeParse','candidateDocumentAccess',
+      'talentPoolMembership','createTalentPool','prepareAttachment','attachmentAccess','archiveAttachment'
+    ]);
+    if(protectedForRecruiter.has(action)){
+      const execution=await getRecruiterHome(1).catch(()=>null);
+      if(execution?.business_role==='RECRUITER'){
+        return NextResponse.json({ok:false,error:'execution_workspace_required'},{status:403});
+      }
+    }
+    const result = await atsAction(action, body.payload || {});
     if (!result?.ok) return NextResponse.json(result || { error: 'Action failed.' }, { status: statusFor(result?.error) });
     return NextResponse.json(result);
   } catch (error) {
