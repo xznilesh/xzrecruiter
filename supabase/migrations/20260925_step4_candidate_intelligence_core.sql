@@ -26,7 +26,7 @@ create table if not exists public.candidate_profile_versions (
   model_name text,
   prompt_version text not null,
   schema_version text not null,
-  match_schema_version text not null default 'xz-candidate-match-v1',
+  match_schema_version text not null default 'xz-candidate-match-v2',
   input_hash text not null,
   is_current boolean not null default true,
   created_by_user_id uuid not null references public.users(id) on delete restrict,
