@@ -29,6 +29,7 @@ export default function RecruiterRequirementWorkspace({initialContext,jobId}){
  const[intake,setIntake]=useState({candidateId:'',fullName:'',email:'',phone:'',currentTitle:'',currentCompany:'',sourceType:'',sourceReference:'',sourcingNotes:''});
  const[resume,setResume]=useState(null);
  const[search,setSearch]=useState('');const[searchRows,setSearchRows]=useState([]);const[searching,setSearching]=useState(false);
+ const[talentQuery,setTalentQuery]=useState('');const[talentRows,setTalentRows]=useState([]);const[talentSearching,setTalentSearching]=useState(false);
  const intakeKeyRef=useRef(uid());const taskKeyRef=useRef(uid());const assignmentKeyRef=useRef(uid());
  const[task,setTask]=useState({taskType:'FOLLOW_UP',title:'Follow up with candidate',dueLocal:'',priority:'NORMAL',candidateId:'',applicationId:'',description:''});
  const[assignment,setAssignment]=useState({recruiterUserId:'',dailyTarget:'1',totalTarget:'0',status:'ACTIVE',priority:'',priorityContext:'',managerInstructions:'',blockerType:'',blockerReason:'',blockerOwnerUserId:''});
@@ -63,6 +64,25 @@ export default function RecruiterRequirementWorkspace({initialContext,jobId}){
    }catch{setSearchRows([])}finally{setSearching(false)}
  }
 
+ async function searchTalent(){
+   setTalentSearching(true);setMessage('');
+   try{
+     const res=await fetch('/api/candidate-intelligence?mode=talentSearch&jobId='+encodeURIComponent(jobId)+'&q='+encodeURIComponent(talentQuery.trim()),{cache:'no-store'});
+     const data=await res.json().catch(()=>({}));
+     if(!res.ok)throw new Error(data?.error||'talent_search_failed');
+     setTalentRows(data?.rows||[]);
+   }catch(e){setState('error');setMessage(e.message);setTalentRows([])}
+   finally{setTalentSearching(false)}
+ }
+
+ async function addTalentCandidate(row){
+   setState('saving');setMessage('');
+   try{
+     await post({action:'intakeCandidate',jobId,candidate:{id:row.id},sourceType:'INTERNAL_DATABASE',sourceReference:'',sourcingNotes:'Reused from same-tenant talent intelligence search',idempotencyKey:uid()});
+     await refresh();await searchTalent();setState('saved');setMessage('Existing talent candidate associated with this requirement.');
+   }catch(e){setState('error');setMessage(e.message)}
+ }
+
  function chooseExisting(row){
    setIntake({candidateId:row.id,fullName:row.full_name||'',email:row.email||'',phone:row.phone||'',currentTitle:row.current_title||'',currentCompany:row.current_company||'',sourceType:'INTERNAL_DATABASE',sourceReference:'',sourcingNotes:''});
    setSearchRows([]);setSearch('');
@@ -82,7 +102,7 @@ export default function RecruiterRequirementWorkspace({initialContext,jobId}){
      const data=await post({action:'intakeCandidate',jobId,candidate:intake.candidateId?{id:intake.candidateId}:{fullName:intake.fullName,email:intake.email,phone:intake.phone,currentTitle:intake.currentTitle,currentCompany:intake.currentCompany},sourceType:intake.sourceType,sourceReference:intake.sourceReference,sourcingNotes:intake.sourcingNotes,idempotencyKey:intakeKeyRef.current});
      if(resume)await uploadResume(data.candidate_id);
      setIntakeOpen(false);setResume(null);intakeKeyRef.current=uid();if(fileRef.current)fileRef.current.value='';
-     setIntake({candidateId:'',fullName:'',email:'',phone:'',currentTitle:'',currentCompany:'',sourceType:'LINKEDIN',sourceReference:'',sourcingNotes:''});
+     setIntake({candidateId:'',fullName:'',email:'',phone:'',currentTitle:'',currentCompany:'',sourceType:'',sourceReference:'',sourcingNotes:''});
      await refresh();setState('saved');setMessage(data.already_associated?'Candidate was already on this requirement; existing candidacy reused.':data.reused?'Existing candidate reused and associated with this requirement.':'Candidate sourced and added to the requirement.');
    }catch(e){setState('error');setMessage(e.message==='existing_candidate_found'?'An existing candidate with this contact already exists. Search internal talent and reuse that record instead of creating a duplicate.':e.message==='candidate_intake_conflict'?'Candidate intake was retried concurrently. Refresh/search internal talent before retrying.':e.message)}
  }
@@ -174,8 +194,14 @@ export default function RecruiterRequirementWorkspace({initialContext,jobId}){
      <div className="rx-work-list">{filteredQueue.length?filteredQueue.map(row=><article key={row.application_id} className={row.blocked?'blocked':''}>
        <div><b>{row.full_name}</b><span>{[row.current_title,row.current_company].filter(Boolean).join(' · ')||'Candidate'}</span><small>{row.source_type||'UNKNOWN SOURCE'}{row.sourced_at?' · sourced '+fmtDue(row.sourced_at,ctx.timezone):''}</small></div>
        <div className="rx-work-state"><span>{String(row.queue_group||'SOURCING').replaceAll('_',' ')}</span><small>{String(row.canonical_state||row.stage_code||row.stage||'SOURCED').replaceAll('_',' ')}</small></div>
-       <div className="rx-row-actions"><button onClick={()=>taskFor(row,'FOLLOW_UP')}>Follow-up</button><button onClick={()=>taskFor(row,'COLLECT_RESUME')}>Resume</button><button onClick={()=>taskFor(row,'SCREENING_DUE')}>Screening</button></div>
+       <div className="rx-row-actions"><a href={'/recruiter/requirements/'+jobId+'/candidates/'+row.candidate_id+'/intelligence'}>Intelligence</a><button onClick={()=>taskFor(row,'FOLLOW_UP')}>Follow-up</button><button onClick={()=>taskFor(row,'COLLECT_RESUME')}>Resume</button><button onClick={()=>taskFor(row,'SCREENING_DUE')}>Screening</button></div>
      </article>):<div className="rx-empty compact">No candidates in this queue. Source/add a candidate to begin execution.</div>}</div>
+   </section>
+
+   <section className="rx-section">
+     <div className="rx-section-head"><div><span className="page-kicker">Step 4 · Talent intelligence</span><h2>Find existing relevant candidates</h2><p>Tenant scope first → approved must-have skill coverage → lexical relevance. No cross-organization or unrestricted semantic search.</p></div></div>
+     <div className="rx-internal-search"><input value={talentQuery} onChange={e=>setTalentQuery(e.target.value)} placeholder="Optional: title, skill, company or location"/><button onClick={searchTalent} disabled={talentSearching}>{talentSearching?'Ranking…':'Find matching talent'}</button></div>
+     <div className="rx-search-results">{talentRows.length?talentRows.map(row=><article key={row.id}><div><b>{row.full_name}</b><span>{[row.current_title,row.current_company,row.city,row.country_code].filter(Boolean).join(' · ')}</span><small>{row.required_skill_count?String(row.matched_skill_count)+'/'+String(row.required_skill_count)+' approved must-have skills evidenced':'No structured skill baseline'}{row.intelligence_available?' · normalized profile available':' · legacy profile evidence'}</small></div>{row.already_on_requirement?<a href={'/recruiter/requirements/'+jobId+'/candidates/'+row.id+'/intelligence'}>Open intelligence</a>:<button onClick={()=>addTalentCandidate(row)}>Add to requirement</button>}</article>):<div className="rx-empty compact">Run tenant-scoped talent matching to rank existing candidates.</div>}</div>
    </section>
 
    <div className="rx-two-col">
