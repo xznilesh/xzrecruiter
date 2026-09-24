@@ -3,12 +3,26 @@
 -- No Step-4 candidate intelligence/scoring is introduced.
 
 alter table public.recruitment_jobs
-  add column if not exists daily_submission_target integer not null default 0;
+  add column if not exists daily_submission_target integer not null default 0,
+  add column if not exists submission_target_total integer not null default 0;
 alter table public.recruitment_jobs
   drop constraint if exists recruitment_jobs_daily_submission_target_check;
 alter table public.recruitment_jobs
   add constraint recruitment_jobs_daily_submission_target_check
   check (daily_submission_target >= 0 and daily_submission_target <= 1000);
+alter table public.recruitment_jobs
+  drop constraint if exists recruitment_jobs_submission_target_total_check;
+alter table public.recruitment_jobs
+  add constraint recruitment_jobs_submission_target_total_check
+  check (submission_target_total >= 0 and submission_target_total <= 10000);
+
+alter table public.candidate_submissions
+  add column if not exists invalidated_at timestamptz,
+  add column if not exists withdrawn_at timestamptz;
+create index if not exists idx_xzr_submission_target_credit
+  on public.candidate_submissions(agency_id,job_id,created_by_user_id,submitted_at desc)
+  where workflow_status='CLIENT_SUBMITTED' and status='SUBMITTED'
+    and invalidated_at is null and withdrawn_at is null;
 
 create table if not exists public.requirement_recruiter_assignments (
   id uuid primary key default gen_random_uuid(),
@@ -16,6 +30,7 @@ create table if not exists public.requirement_recruiter_assignments (
   job_id uuid not null references public.recruitment_jobs(id) on delete cascade,
   recruiter_user_id uuid not null references public.users(id) on delete cascade,
   daily_target integer not null default 0 check (daily_target >= 0 and daily_target <= 1000),
+  total_submission_target integer not null default 0 check (total_submission_target >= 0 and total_submission_target <= 10000),
   assignment_status text not null default 'ACTIVE'
     check (assignment_status in ('ACTIVE','PAUSED','COMPLETED','REMOVED')),
   priority_context text,
@@ -153,7 +168,7 @@ $fn$;
 revoke all on function private.xzrecruiter_workspace_day_bounds(uuid) from public,anon,authenticated;
 
 create or replace function public.xzrecruiter_save_requirement_assignment(
-  p_token text,p_job_id uuid,p_recruiter_user_id uuid,p_daily_target integer,
+  p_token text,p_job_id uuid,p_recruiter_user_id uuid,p_daily_target integer,p_total_target integer default 0,
   p_status text default 'ACTIVE',p_priority_context text default null,
   p_manager_instructions text default null,p_idempotency_key text default null
 ) returns jsonb
@@ -174,6 +189,7 @@ begin
   end if;
   if v_status not in ('ACTIVE','PAUSED','COMPLETED','REMOVED') then return jsonb_build_object('ok',false,'error','invalid_assignment_status'); end if;
   if coalesce(p_daily_target,0)<0 or coalesce(p_daily_target,0)>1000 then return jsonb_build_object('ok',false,'error','invalid_daily_target'); end if;
+  if coalesce(p_total_target,0)<0 or coalesce(p_total_target,0)>10000 then return jsonb_build_object('ok',false,'error','invalid_total_target'); end if;
   if not exists(
     select 1 from public.recruitment_jobs
     where id=p_job_id and agency_id=v_agency and archived_at is null
@@ -200,16 +216,16 @@ begin
   end if;
 
   insert into public.requirement_recruiter_assignments(
-    agency_id,job_id,recruiter_user_id,daily_target,assignment_status,priority_context,
+    agency_id,job_id,recruiter_user_id,daily_target,total_submission_target,assignment_status,priority_context,
     manager_instructions,assigned_by_user_id,idempotency_key
   ) values(
-    v_agency,p_job_id,p_recruiter_user_id,coalesce(p_daily_target,0),v_status,
+    v_agency,p_job_id,p_recruiter_user_id,coalesce(p_daily_target,0),coalesce(p_total_target,0),v_status,
     nullif(left(coalesce(p_priority_context,''),500),''),
     nullif(left(coalesce(p_manager_instructions,''),2000),''),
     v_user,nullif(left(coalesce(p_idempotency_key,''),160),'')
   )
   on conflict(agency_id,job_id,recruiter_user_id) do update
-  set daily_target=excluded.daily_target,assignment_status=excluded.assignment_status,
+  set daily_target=excluded.daily_target,total_submission_target=excluded.total_submission_target,assignment_status=excluded.assignment_status,
       priority_context=excluded.priority_context,manager_instructions=excluded.manager_instructions,
       assigned_by_user_id=v_user,updated_at=now()
   returning id into v_id;
@@ -218,7 +234,7 @@ begin
     v_agency,v_user,'job',p_job_id,'requirement.recruiter_assigned','Recruiter assignment saved',
     jsonb_build_object(
       'assignment_id',v_id,'recruiter_user_id',p_recruiter_user_id,'daily_target',coalesce(p_daily_target,0),
-      'assignment_status',v_status,'actor_business_role',v_business_role
+      'total_target',coalesce(p_total_target,0),'assignment_status',v_status,'actor_business_role',v_business_role
     )
   );
   return jsonb_build_object('ok',true,'id',v_id,'reused',false);
@@ -226,13 +242,13 @@ end;
 $fn$;
 
 create or replace function public.xzrecruiter_set_requirement_daily_target(
-  p_token text,p_job_id uuid,p_daily_target integer
+  p_token text,p_job_id uuid,p_daily_target integer,p_total_target integer default 0
 ) returns jsonb
 language plpgsql
 security definer
 set search_path='public','private','extensions','pg_temp'
 as $fn$
-declare v_agency uuid;v_user uuid;v_membership_role text;v_business_role text;v_before integer;
+declare v_agency uuid;v_user uuid;v_membership_role text;v_business_role text;v_before integer;v_before_total integer;
 begin
   select agency_id,user_id,role into v_agency,v_user,v_membership_role
   from private.xzrecruiter_session_context(p_token);
@@ -242,18 +258,23 @@ begin
     return jsonb_build_object('ok',false,'error','assignment_manager_only');
   end if;
   if coalesce(p_daily_target,0)<0 or coalesce(p_daily_target,0)>1000 then return jsonb_build_object('ok',false,'error','invalid_daily_target'); end if;
-  select daily_submission_target into v_before
+  if coalesce(p_total_target,0)<0 or coalesce(p_total_target,0)>10000 then return jsonb_build_object('ok',false,'error','invalid_total_target'); end if;
+  select daily_submission_target,submission_target_total into v_before,v_before_total
   from public.recruitment_jobs
   where id=p_job_id and agency_id=v_agency and archived_at is null;
   if not found then return jsonb_build_object('ok',false,'error','job_not_found'); end if;
   update public.recruitment_jobs
-  set daily_submission_target=coalesce(p_daily_target,0),updated_at=now()
+  set daily_submission_target=coalesce(p_daily_target,0),submission_target_total=coalesce(p_total_target,0),updated_at=now()
   where id=p_job_id and agency_id=v_agency;
   perform private.xzrecruiter_log_activity(
     v_agency,v_user,'job',p_job_id,'requirement.target_updated','Daily submission target updated',
-    jsonb_build_object('before',v_before,'after',coalesce(p_daily_target,0),'actor_business_role',v_business_role)
+    jsonb_build_object(
+      'daily_before',v_before,'daily_after',coalesce(p_daily_target,0),
+      'total_before',v_before_total,'total_after',coalesce(p_total_target,0),
+      'actor_business_role',v_business_role
+    )
   );
-  return jsonb_build_object('ok',true,'daily_target',coalesce(p_daily_target,0));
+  return jsonb_build_object('ok',true,'daily_target',coalesce(p_daily_target,0),'total_target',coalesce(p_total_target,0));
 end;
 $fn$;
 
@@ -284,7 +305,7 @@ begin
 
   with assigned as (
     select ra.*,j.title,j.client_id,j.priority,j.openings,j.target_fill_date,j.status,j.requirement_state,
-      j.daily_submission_target,j.opened_at,j.approved_hiring_brief_id,
+      j.daily_submission_target,j.submission_target_total,j.opened_at,j.approved_hiring_brief_id,
       c.name account_name,
       hb.hiring_brief->>'roleSummary' brief_summary,
       coalesce(hb.hiring_brief->'mustHaveCriteria','[]'::jsonb) must_haves,
@@ -295,10 +316,22 @@ begin
         left join public.pipeline_stages psx on psx.id=a.stage_id and psx.agency_id=v_agency
         where cs.agency_id=v_agency and cs.job_id=j.id
           and cs.workflow_status='CLIENT_SUBMITTED' and cs.status='SUBMITTED'
+          and cs.invalidated_at is null and cs.withdrawn_at is null
           and cs.submitted_at>=v_start and cs.submitted_at<v_end
-          and a.owner_user_id=ra.recruiter_user_id
+          and cs.created_by_user_id=ra.recruiter_user_id
           and private.xzrecruiter_canonical_candidacy_state(coalesce(psx.code,a.stage)) not in ('WITHDRAWN','REJECTED')
       ),0)::integer valid_submissions_today,
+      coalesce((
+        select count(distinct cs.application_id)
+        from public.candidate_submissions cs
+        join public.applications a on a.id=cs.application_id and a.agency_id=v_agency
+        left join public.pipeline_stages psx on psx.id=a.stage_id and psx.agency_id=v_agency
+        where cs.agency_id=v_agency and cs.job_id=j.id
+          and cs.workflow_status='CLIENT_SUBMITTED' and cs.status='SUBMITTED'
+          and cs.invalidated_at is null and cs.withdrawn_at is null
+          and cs.created_by_user_id=ra.recruiter_user_id
+          and private.xzrecruiter_canonical_candidacy_state(coalesce(psx.code,a.stage)) not in ('WITHDRAWN','REJECTED')
+      ),0)::integer valid_submissions_total,
       coalesce((
         select count(*)
         from public.applications ap
@@ -349,6 +382,7 @@ begin
   ), scored as (
     select a.*,
       greatest(0,a.daily_target-a.valid_submissions_today)::integer remaining_target,
+      greatest(0,a.total_submission_target-a.valid_submissions_total)::integer remaining_total_target,
       (
         greatest(0,a.daily_target-a.valid_submissions_today)*20
         + case a.priority when 'URGENT' then 32 when 'HIGH' then 24 when 'NORMAL' then 16 else 8 end
@@ -375,8 +409,10 @@ begin
   into v_requirements,v_target,v_done,v_due,v_screening,v_attention
   from (
     select id assignment_id,job_id,recruiter_user_id,title,account_name,priority,openings,target_fill_date,status,
-      requirement_state,daily_submission_target requirement_daily_target,daily_target assigned_daily_target,
-      valid_submissions_today,remaining_target,overdue_tasks,due_tasks_today,screening_pending,blocker_count,age_hours,priority_score,
+      requirement_state,daily_submission_target requirement_daily_target,submission_target_total requirement_total_target,
+      daily_target assigned_daily_target,total_submission_target assigned_total_target,
+      valid_submissions_today,valid_submissions_total,remaining_target,remaining_total_target,
+      overdue_tasks,due_tasks_today,screening_pending,blocker_count,age_hours,priority_score,
       priority_context,manager_instructions,brief_summary,must_haves,pipeline_candidates
     from scored
     order by priority_score desc,remaining_target desc,title asc
@@ -451,7 +487,7 @@ declare
   v_agency uuid;v_user uuid;v_membership_role text;v_business_role text;v_timezone text;v_local_date date;
   v_start timestamptz;v_end timestamptz;v_limit integer:=greatest(1,least(coalesce(p_queue_limit,50),100));
   v_job jsonb;v_brief jsonb;v_criteria jsonb;v_assignment jsonb;v_assignments jsonb;v_recruiters jsonb;
-  v_queue jsonb;v_tasks jsonb;v_blockers jsonb;v_valid integer:=0;v_target integer:=0;
+  v_queue jsonb;v_tasks jsonb;v_blockers jsonb;v_valid integer:=0;v_valid_total integer:=0;v_target integer:=0;v_total_target integer:=0;
 begin
   select agency_id,user_id,role into v_agency,v_user,v_membership_role
   from private.xzrecruiter_session_context(p_token);
@@ -471,7 +507,8 @@ begin
     'salary_min',j.salary_min,'salary_max',j.salary_max,'salary_currency',j.salary_currency,'salary_period',j.salary_period,
     'experience_min',j.experience_min,'experience_max',j.experience_max,'work_authorization_requirements',j.work_authorization_requirements,
     'requirement_state',j.requirement_state,'recruiter_ready',j.recruiter_ready,
-    'daily_submission_target',j.daily_submission_target,'approved_hiring_brief_id',j.approved_hiring_brief_id
+    'daily_submission_target',j.daily_submission_target,'submission_target_total',j.submission_target_total,
+    'approved_hiring_brief_id',j.approved_hiring_brief_id
   )
   into v_job
   from public.recruitment_jobs j
@@ -499,7 +536,7 @@ begin
 
   select to_jsonb(x) into v_assignment
   from (
-    select ra.id,ra.daily_target,ra.assignment_status,ra.priority_context,ra.manager_instructions,
+    select ra.id,ra.daily_target,ra.total_submission_target,ra.assignment_status,ra.priority_context,ra.manager_instructions,
       ra.assigned_at,ra.recruiter_user_id,u.display_name recruiter_name
     from public.requirement_recruiter_assignments ra
     left join public.users u on u.id=ra.recruiter_user_id
@@ -513,7 +550,7 @@ begin
     select coalesce(jsonb_agg(to_jsonb(x) order by x.recruiter_name),'[]'::jsonb)
     into v_assignments
     from (
-      select ra.id,ra.recruiter_user_id,u.display_name recruiter_name,ra.daily_target,ra.assignment_status,
+      select ra.id,ra.recruiter_user_id,u.display_name recruiter_name,ra.daily_target,ra.total_submission_target,ra.assignment_status,
         ra.priority_context,ra.manager_instructions,ra.assigned_at,ra.updated_at
       from public.requirement_recruiter_assignments ra
       left join public.users u on u.id=ra.recruiter_user_id
@@ -592,23 +629,45 @@ begin
 
   if v_business_role='RECRUITER' then
     v_target:=coalesce((v_assignment->>'daily_target')::integer,0);
+    v_total_target:=coalesce((v_assignment->>'total_submission_target')::integer,0);
     select count(distinct cs.application_id)::integer into v_valid
     from public.candidate_submissions cs
     join public.applications a on a.id=cs.application_id and a.agency_id=v_agency
     left join public.pipeline_stages psx on psx.id=a.stage_id and psx.agency_id=v_agency
     where cs.agency_id=v_agency and cs.job_id=p_job_id and a.owner_user_id=v_user
       and cs.workflow_status='CLIENT_SUBMITTED' and cs.status='SUBMITTED'
+      and cs.invalidated_at is null and cs.withdrawn_at is null
+      and cs.created_by_user_id=v_user
       and cs.submitted_at>=v_start and cs.submitted_at<v_end
+      and private.xzrecruiter_canonical_candidacy_state(coalesce(psx.code,a.stage)) not in ('WITHDRAWN','REJECTED');
+    select count(distinct cs.application_id)::integer into v_valid_total
+    from public.candidate_submissions cs
+    join public.applications a on a.id=cs.application_id and a.agency_id=v_agency
+    left join public.pipeline_stages psx on psx.id=a.stage_id and psx.agency_id=v_agency
+    where cs.agency_id=v_agency and cs.job_id=p_job_id
+      and cs.workflow_status='CLIENT_SUBMITTED' and cs.status='SUBMITTED'
+      and cs.invalidated_at is null and cs.withdrawn_at is null
+      and cs.created_by_user_id=v_user
       and private.xzrecruiter_canonical_candidacy_state(coalesce(psx.code,a.stage)) not in ('WITHDRAWN','REJECTED');
   else
     v_target:=coalesce((v_job->>'daily_submission_target')::integer,0);
+    v_total_target:=coalesce((v_job->>'submission_target_total')::integer,0);
     select count(distinct cs.application_id)::integer into v_valid
     from public.candidate_submissions cs
     join public.applications a on a.id=cs.application_id and a.agency_id=v_agency
     left join public.pipeline_stages psx on psx.id=a.stage_id and psx.agency_id=v_agency
     where cs.agency_id=v_agency and cs.job_id=p_job_id
       and cs.workflow_status='CLIENT_SUBMITTED' and cs.status='SUBMITTED'
+      and cs.invalidated_at is null and cs.withdrawn_at is null
       and cs.submitted_at>=v_start and cs.submitted_at<v_end
+      and private.xzrecruiter_canonical_candidacy_state(coalesce(psx.code,a.stage)) not in ('WITHDRAWN','REJECTED');
+    select count(distinct cs.application_id)::integer into v_valid_total
+    from public.candidate_submissions cs
+    join public.applications a on a.id=cs.application_id and a.agency_id=v_agency
+    left join public.pipeline_stages psx on psx.id=a.stage_id and psx.agency_id=v_agency
+    where cs.agency_id=v_agency and cs.job_id=p_job_id
+      and cs.workflow_status='CLIENT_SUBMITTED' and cs.status='SUBMITTED'
+      and cs.invalidated_at is null and cs.withdrawn_at is null
       and private.xzrecruiter_canonical_candidacy_state(coalesce(psx.code,a.stage)) not in ('WITHDRAWN','REJECTED');
   end if;
 
@@ -620,7 +679,9 @@ begin
     'eligible_recruiters',coalesce(v_recruiters,'[]'::jsonb),
     'execution',jsonb_build_object(
       'daily_target',v_target,'valid_submissions_today',coalesce(v_valid,0),
-      'remaining_target',greatest(0,v_target-coalesce(v_valid,0))
+      'remaining_target',greatest(0,v_target-coalesce(v_valid,0)),
+      'total_target',v_total_target,'valid_submissions_total',coalesce(v_valid_total,0),
+      'remaining_total_target',greatest(0,v_total_target-coalesce(v_valid_total,0))
     ),
     'queue',coalesce(v_queue,'[]'::jsonb),'tasks',coalesce(v_tasks,'[]'::jsonb),
     'blockers',coalesce(v_blockers,'[]'::jsonb)
@@ -1000,8 +1061,8 @@ end;
 $fn$;
 
 -- Explicit function privileges: SECURITY DEFINER endpoints are not left to implicit PUBLIC EXECUTE.
-revoke all on function public.xzrecruiter_save_requirement_assignment(text,uuid,uuid,integer,text,text,text,text) from public,anon,authenticated;
-revoke all on function public.xzrecruiter_set_requirement_daily_target(text,uuid,integer) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_save_requirement_assignment(text,uuid,uuid,integer,integer,text,text,text,text) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_set_requirement_daily_target(text,uuid,integer,integer) from public,anon,authenticated;
 revoke all on function public.xzrecruiter_recruiter_home(text,integer) from public,anon,authenticated;
 revoke all on function public.xzrecruiter_recruiter_requirement_context(text,uuid,integer) from public,anon,authenticated;
 revoke all on function public.xzrecruiter_recruiter_candidate_search(text,uuid,text,integer) from public,anon,authenticated;
@@ -1009,8 +1070,8 @@ revoke all on function public.xzrecruiter_recruiter_intake_candidate(text,uuid,j
 revoke all on function public.xzrecruiter_save_execution_task(text,jsonb) from public,anon,authenticated;
 revoke all on function public.xzrecruiter_set_execution_task_status(text,uuid,text) from public,anon,authenticated;
 
-grant execute on function public.xzrecruiter_save_requirement_assignment(text,uuid,uuid,integer,text,text,text,text) to anon,authenticated;
-grant execute on function public.xzrecruiter_set_requirement_daily_target(text,uuid,integer) to anon,authenticated;
+grant execute on function public.xzrecruiter_save_requirement_assignment(text,uuid,uuid,integer,integer,text,text,text,text) to anon,authenticated;
+grant execute on function public.xzrecruiter_set_requirement_daily_target(text,uuid,integer,integer) to anon,authenticated;
 grant execute on function public.xzrecruiter_recruiter_home(text,integer) to anon,authenticated;
 grant execute on function public.xzrecruiter_recruiter_requirement_context(text,uuid,integer) to anon,authenticated;
 grant execute on function public.xzrecruiter_recruiter_candidate_search(text,uuid,text,integer) to anon,authenticated;
