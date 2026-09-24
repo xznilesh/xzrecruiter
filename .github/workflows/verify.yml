@@ -3,7 +3,7 @@ on:
   push:
     branches: [production-rebuild-v1, main, step1-workflow-contract-lock, step2-ai-jd-brain, step3-recruiter-execution-workspace, step2-global-foundation, step3-agency-onboarding, step4-global-enterprise-ats, step4-closeout-stage-guard, step4-closeout-public-apply, step4-final-quality, step5-recruitment-crm]
   pull_request:
-    branches: [main, step1-workflow-contract-lock, step2-global-foundation, step3-agency-onboarding, step4-global-enterprise-ats]
+    branches: [main, step1-workflow-contract-lock, step2-ai-jd-brain, step2-global-foundation, step3-agency-onboarding, step4-global-enterprise-ats]
 jobs:
   build:
     runs-on: ubuntu-latest
