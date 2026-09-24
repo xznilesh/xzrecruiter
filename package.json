@@ -21,7 +21,14 @@
     "test:step5:portals": "node scripts/step5-portals-tests.mjs",
     "test:step5:performance": "node scripts/step5-performance-guard.mjs",
     "test:step1:contract": "node scripts/step1-workflow-contract-tests.mjs",
-    "test:step1:security": "node scripts/step1-workflow-security-tests.mjs"
+    "test:step1:security": "node scripts/step1-workflow-security-tests.mjs",
+    "check:step2:jd:syntax": "node scripts/step2-jd-static-check.mjs",
+    "test:step2:jd:unit": "node scripts/step2-jd-unit-tests.mjs",
+    "test:step2:jd:integration": "node scripts/step2-jd-integration-tests.mjs",
+    "test:step2:jd:e2e": "node scripts/step2-jd-e2e-tests.mjs",
+    "test:step2:jd:security": "node scripts/step2-jd-security-tests.mjs",
+    "test:step2:jd:regression": "node scripts/step2-jd-regression-tests.mjs",
+    "test:step2:jd:live": "node scripts/step2-jd-live-eval.mjs"
   },
   "dependencies": {
     "mammoth": "1.9.1",
