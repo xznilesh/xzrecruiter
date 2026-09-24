@@ -366,7 +366,7 @@ set search_path='public','private','extensions','pg_temp'
 as $fn$
 declare
   v_agency uuid;v_user uuid;v_membership_role text;v_business_role text;
-  v_job uuid;v_status text;v_run uuid;v_existing_status text;v_attempt integer;
+  v_job uuid;v_status text;v_run uuid;v_existing_status text;v_attempt integer;v_started_at timestamptz;
 begin
   select agency_id,user_id,role into v_agency,v_user,v_membership_role
   from private.xzrecruiter_session_context(p_token);
@@ -381,7 +381,7 @@ begin
   if v_status<>'READY' then return jsonb_build_object('ok',false,'error','jd_source_not_ready'); end if;
   if length(coalesce(p_idempotency_key,''))<32 then return jsonb_build_object('ok',false,'error','invalid_idempotency_key'); end if;
 
-  select id,run_status,attempt_count into v_run,v_existing_status,v_attempt
+  select id,run_status,attempt_count,started_at into v_run,v_existing_status,v_attempt,v_started_at
   from public.requirement_ai_runs
   where agency_id=v_agency and idempotency_key=p_idempotency_key
   limit 1;
@@ -389,7 +389,7 @@ begin
   if v_run is not null and v_existing_status='SUCCEEDED' then
     return jsonb_build_object('ok',true,'run_id',v_run,'reused',true,'run_status','SUCCEEDED');
   end if;
-  if v_run is not null and v_existing_status='PROCESSING' then
+  if v_run is not null and v_existing_status='PROCESSING' and v_started_at > now()-interval '5 minutes' then
     return jsonb_build_object('ok',true,'run_id',v_run,'reused',true,'run_status','PROCESSING');
   end if;
 
@@ -743,7 +743,6 @@ begin
   if exists(
     select 1 from public.requirement_criteria
     where agency_id=v_agency and brief_id=p_brief_id and criterion_kind='HARD_REQUIREMENT'
-      and (enforcement='PROPOSED_REVIEW' or requires_am_confirmation=true)
       and am_confirmed=false
   ) then return jsonb_build_object('ok',false,'error','hard_rules_need_confirmation'); end if;
 
