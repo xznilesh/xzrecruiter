@@ -31,7 +31,7 @@ create table if not exists public.requirement_recruiter_assignments (
   recruiter_user_id uuid not null references public.users(id) on delete cascade,
   daily_target integer not null default 0 check (daily_target >= 0 and daily_target <= 1000),
   total_submission_target integer not null default 0 check (total_submission_target >= 0 and total_submission_target <= 10000),
-  assignment_priority text not null default 'NORMAL' check (assignment_priority in ('LOW','NORMAL','HIGH','URGENT')),
+  assignment_priority text check (assignment_priority is null or assignment_priority in ('LOW','NORMAL','HIGH','URGENT')),
   blocker_type text,
   blocker_reason text,
   blocker_owner_user_id uuid references public.users(id) on delete set null,
@@ -177,7 +177,9 @@ revoke all on function private.xzrecruiter_workspace_day_bounds(uuid) from publi
 create or replace function public.xzrecruiter_save_requirement_assignment(
   p_token text,p_job_id uuid,p_recruiter_user_id uuid,p_daily_target integer,p_total_target integer default 0,
   p_status text default 'ACTIVE',p_priority_context text default null,
-  p_manager_instructions text default null,p_idempotency_key text default null
+  p_manager_instructions text default null,p_idempotency_key text default null,
+  p_assignment_priority text default null,p_blocker_type text default null,
+  p_blocker_reason text default null,p_blocker_owner_user_id uuid default null
 ) returns jsonb
 language plpgsql
 security definer
@@ -185,7 +187,8 @@ set search_path='public','private','extensions','pg_temp'
 as $fn$
 declare
   v_agency uuid;v_user uuid;v_membership_role text;v_business_role text;v_recruiter_role text;
-  v_status text:=upper(coalesce(p_status,'ACTIVE'));v_id uuid;v_existing uuid;
+  v_status text:=upper(coalesce(p_status,'ACTIVE'));v_priority text:=nullif(upper(btrim(coalesce(p_assignment_priority,''))),'');
+  v_id uuid;v_existing uuid;
 begin
   select agency_id,user_id,role into v_agency,v_user,v_membership_role
   from private.xzrecruiter_session_context(p_token);
@@ -197,6 +200,11 @@ begin
   if v_status not in ('ACTIVE','PAUSED','COMPLETED','REMOVED') then return jsonb_build_object('ok',false,'error','invalid_assignment_status'); end if;
   if coalesce(p_daily_target,0)<0 or coalesce(p_daily_target,0)>1000 then return jsonb_build_object('ok',false,'error','invalid_daily_target'); end if;
   if coalesce(p_total_target,0)<0 or coalesce(p_total_target,0)>10000 then return jsonb_build_object('ok',false,'error','invalid_total_target'); end if;
+  if v_priority is not null and v_priority not in ('LOW','NORMAL','HIGH','URGENT') then return jsonb_build_object('ok',false,'error','invalid_assignment_priority'); end if;
+  if p_blocker_owner_user_id is not null and not exists(
+    select 1 from public.agency_memberships am
+    where am.agency_id=v_agency and am.user_id=p_blocker_owner_user_id
+  ) then return jsonb_build_object('ok',false,'error','invalid_blocker_owner'); end if;
   if not exists(
     select 1 from public.recruitment_jobs
     where id=p_job_id and agency_id=v_agency and archived_at is null
@@ -223,25 +231,34 @@ begin
   end if;
 
   insert into public.requirement_recruiter_assignments(
-    agency_id,job_id,recruiter_user_id,daily_target,total_submission_target,assignment_status,priority_context,
+    agency_id,job_id,recruiter_user_id,daily_target,total_submission_target,assignment_priority,
+    blocker_type,blocker_reason,blocker_owner_user_id,assignment_status,priority_context,
     manager_instructions,assigned_by_user_id,idempotency_key
   ) values(
-    v_agency,p_job_id,p_recruiter_user_id,coalesce(p_daily_target,0),coalesce(p_total_target,0),v_status,
+    v_agency,p_job_id,p_recruiter_user_id,coalesce(p_daily_target,0),coalesce(p_total_target,0),v_priority,
+    nullif(left(btrim(coalesce(p_blocker_type,'')),120),''),
+    nullif(left(btrim(coalesce(p_blocker_reason,'')),1500),''),
+    p_blocker_owner_user_id,v_status,
     nullif(left(coalesce(p_priority_context,''),500),''),
     nullif(left(coalesce(p_manager_instructions,''),2000),''),
     v_user,nullif(left(coalesce(p_idempotency_key,''),160),'')
   )
   on conflict(agency_id,job_id,recruiter_user_id) do update
-  set daily_target=excluded.daily_target,total_submission_target=excluded.total_submission_target,assignment_status=excluded.assignment_status,
-      priority_context=excluded.priority_context,manager_instructions=excluded.manager_instructions,
-      assigned_by_user_id=v_user,updated_at=now()
+  set daily_target=excluded.daily_target,total_submission_target=excluded.total_submission_target,
+      assignment_priority=excluded.assignment_priority,blocker_type=excluded.blocker_type,
+      blocker_reason=excluded.blocker_reason,blocker_owner_user_id=excluded.blocker_owner_user_id,
+      assignment_status=excluded.assignment_status,priority_context=excluded.priority_context,
+      manager_instructions=excluded.manager_instructions,assigned_by_user_id=v_user,updated_at=now()
   returning id into v_id;
 
   perform private.xzrecruiter_log_activity(
     v_agency,v_user,'job',p_job_id,'requirement.recruiter_assigned','Recruiter assignment saved',
     jsonb_build_object(
       'assignment_id',v_id,'recruiter_user_id',p_recruiter_user_id,'daily_target',coalesce(p_daily_target,0),
-      'total_target',coalesce(p_total_target,0),'assignment_status',v_status,'actor_business_role',v_business_role
+      'total_target',coalesce(p_total_target,0),'assignment_status',v_status,
+      'assignment_priority',v_priority,'blocker_type',nullif(p_blocker_type,''),
+      'blocker_reason',nullif(p_blocker_reason,''),'blocker_owner_user_id',p_blocker_owner_user_id,
+      'actor_business_role',v_business_role
     )
   );
   return jsonb_build_object('ok',true,'id',v_id,'reused',false);
@@ -392,7 +409,7 @@ begin
       greatest(0,a.total_submission_target-a.valid_submissions_total)::integer remaining_total_target,
       (
         greatest(0,a.daily_target-a.valid_submissions_today)*20
-        + case a.priority when 'URGENT' then 32 when 'HIGH' then 24 when 'NORMAL' then 16 else 8 end
+        + case coalesce(a.assignment_priority,a.priority,'NORMAL') when 'URGENT' then 32 when 'HIGH' then 24 when 'NORMAL' then 16 else 8 end
         + case
             when a.target_fill_date is null then 0
             when a.target_fill_date<v_local_date then 30
@@ -403,7 +420,7 @@ begin
           end
         + least(5,floor(a.age_hours/24.0))::integer
         + least(5,a.pipeline_candidates)
-        - case when a.blocker_count>0 or a.status='ON_HOLD' then 2 else 0 end
+        - case when a.blocker_count>0 or nullif(btrim(coalesce(a.blocker_reason,'')),'') is not null or a.status='ON_HOLD' then 2 else 0 end
       )::integer priority_score
     from assigned a
   )
@@ -412,15 +429,18 @@ begin
          coalesce(sum(x.valid_submissions_today),0)::integer,
          coalesce(sum(x.due_tasks_today),0)::integer,
          coalesce(sum(x.screening_pending),0)::integer,
-         coalesce(sum(case when x.remaining_target>0 or x.due_tasks_today>0 or x.screening_pending>0 or x.blocker_count>0 or x.status='ON_HOLD' then 1 else 0 end),0)::integer
+         coalesce(sum(case when x.remaining_target>0 or x.due_tasks_today>0 or x.screening_pending>0 or x.blocker_count>0 or nullif(btrim(coalesce(x.blocker_reason,'')),'') is not null or x.status='ON_HOLD' then 1 else 0 end),0)::integer
   into v_requirements,v_target,v_done,v_due,v_screening,v_attention
   from (
-    select id assignment_id,job_id,recruiter_user_id,title,account_name client_name,
-      assignment_priority priority,openings,target_fill_date deadline,status requirement_status,
+    select id assignment_id,job_id,recruiter_user_id,title,account_name,account_name client_name,
+      coalesce(assignment_priority,priority,'NORMAL') priority,openings,
+      target_fill_date,target_fill_date deadline,status,status requirement_status,
       requirement_state,daily_submission_target requirement_daily_target,submission_target_total requirement_total_target,
       daily_target,total_submission_target total_target,
       valid_submissions_today,valid_submissions_total,remaining_target,remaining_total_target,
-      overdue_tasks,due_tasks_today,screening_pending,blocker_count,age_hours,priority_score,
+      overdue_tasks,due_tasks_today,screening_pending,
+      (blocker_count + case when nullif(btrim(coalesce(blocker_reason,'')),'') is not null then 1 else 0 end)::integer blocker_count,
+      age_hours,priority_score,
       priority_context,manager_instructions,blocker_type,blocker_reason,blocker_owner_user_id,
       brief_summary,must_haves,pipeline_candidates
     from scored
@@ -546,7 +566,7 @@ begin
 
   select to_jsonb(x) into v_assignment
   from (
-    select ra.id,ra.daily_target,ra.total_submission_target total_target,ra.assignment_priority priority,
+    select ra.id,ra.daily_target,ra.total_submission_target,ra.total_submission_target total_target,ra.assignment_priority priority,
       ra.blocker_type,ra.blocker_reason,ra.blocker_owner_user_id,ra.assignment_status,ra.priority_context,ra.manager_instructions,
       ra.assigned_at,ra.recruiter_user_id,u.display_name recruiter_name
     from public.requirement_recruiter_assignments ra
@@ -562,7 +582,7 @@ begin
     into v_assignments
     from (
       select ra.id,ra.recruiter_user_id,u.display_name recruiter_name,ra.daily_target,
-        ra.total_submission_target total_target,ra.assignment_priority priority,ra.blocker_type,ra.blocker_reason,
+        ra.total_submission_target,ra.total_submission_target total_target,ra.assignment_priority priority,ra.blocker_type,ra.blocker_reason,
         ra.blocker_owner_user_id,ra.assignment_status,ra.priority_context,ra.manager_instructions,ra.assigned_at,ra.updated_at
       from public.requirement_recruiter_assignments ra
       left join public.users u on u.id=ra.recruiter_user_id
@@ -661,7 +681,7 @@ begin
 
   if v_business_role='RECRUITER' then
     v_target:=coalesce((v_assignment->>'daily_target')::integer,0);
-    v_total_target:=coalesce((v_assignment->>'total_submission_target')::integer,0);
+    v_total_target:=coalesce((v_assignment->>'total_submission_target')::integer,(v_assignment->>'total_target')::integer,0);
     select count(distinct cs.application_id)::integer into v_valid
     from public.candidate_submissions cs
     join public.applications a on a.id=cs.application_id and a.agency_id=v_agency
@@ -1094,7 +1114,7 @@ end;
 $fn$;
 
 -- Explicit function privileges: SECURITY DEFINER endpoints are not left to implicit PUBLIC EXECUTE.
-revoke all on function public.xzrecruiter_save_requirement_assignment(text,uuid,uuid,integer,integer,text,text,text,text) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_save_requirement_assignment(text,uuid,uuid,integer,integer,text,text,text,text,text,text,text,uuid) from public,anon,authenticated;
 revoke all on function public.xzrecruiter_set_requirement_daily_target(text,uuid,integer,integer) from public,anon,authenticated;
 revoke all on function public.xzrecruiter_recruiter_home(text,integer) from public,anon,authenticated;
 revoke all on function public.xzrecruiter_recruiter_requirement_context(text,uuid,integer) from public,anon,authenticated;
@@ -1103,7 +1123,7 @@ revoke all on function public.xzrecruiter_recruiter_intake_candidate(text,uuid,j
 revoke all on function public.xzrecruiter_save_execution_task(text,jsonb) from public,anon,authenticated;
 revoke all on function public.xzrecruiter_set_execution_task_status(text,uuid,text) from public,anon,authenticated;
 
-grant execute on function public.xzrecruiter_save_requirement_assignment(text,uuid,uuid,integer,integer,text,text,text,text) to anon,authenticated;
+grant execute on function public.xzrecruiter_save_requirement_assignment(text,uuid,uuid,integer,integer,text,text,text,text,text,text,text,uuid) to anon,authenticated;
 grant execute on function public.xzrecruiter_set_requirement_daily_target(text,uuid,integer,integer) to anon,authenticated;
 grant execute on function public.xzrecruiter_recruiter_home(text,integer) to anon,authenticated;
 grant execute on function public.xzrecruiter_recruiter_requirement_context(text,uuid,integer) to anon,authenticated;
