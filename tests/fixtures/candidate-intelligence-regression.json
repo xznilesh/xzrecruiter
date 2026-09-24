@@ -165,8 +165,9 @@
       }
     ],
     "expected": {
-      "hardRuleStatus": "FAIL",
-      "band": "Mandatory Requirement Missing"
+      "hardRuleStatus": "UNKNOWN",
+      "band": "Possible Match",
+      "falseHardRuleFailurePrevented": true
     }
   },
   {
