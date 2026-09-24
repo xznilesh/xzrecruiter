@@ -26,6 +26,7 @@ create table if not exists public.candidate_profile_versions (
   model_name text,
   prompt_version text not null,
   schema_version text not null,
+  profile_schema_version text not null default 'xz-candidate-profile-v2',
   match_schema_version text not null default 'xz-candidate-match-v2',
   input_hash text not null,
   is_current boolean not null default true,
@@ -176,6 +177,12 @@ create index if not exists idx_xzr_candidate_duplicate_source
   on public.candidate_duplicate_signals(agency_id,candidate_id,created_at desc);
 create index if not exists idx_xzr_candidate_duplicate_compare
   on public.candidate_duplicate_signals(agency_id,compared_candidate_id,created_at desc);
+create index if not exists idx_xzr_candidate_documents_checksum
+  on public.candidate_documents(agency_id,checksum,candidate_id)
+  where archived_at is null and checksum is not null;
+create index if not exists idx_xzr_applications_source_reference
+  on public.applications(agency_id,lower(source_reference),candidate_id)
+  where archived_at is null and source_reference is not null;
 
 create table if not exists public.candidate_intelligence_reviews (
   id uuid primary key default gen_random_uuid(),
