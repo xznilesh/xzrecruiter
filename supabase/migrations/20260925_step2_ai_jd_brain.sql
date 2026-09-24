@@ -459,7 +459,9 @@ begin
     update public.requirement_ai_runs
     set run_status='FAILED',error_code=left(p_error_code,120),error_detail=left(coalesce(p_error_detail,''),1000),completed_at=now()
     where id=p_run_id and agency_id=v_agency;
-    update public.recruitment_jobs set requirement_state='JD_RECEIVED',recruiter_ready=false,updated_at=now()
+    update public.recruitment_jobs
+    set requirement_state=case when approved_hiring_brief_id is not null then 'CHANGE_PENDING_AM_CONFIRMATION' else 'JD_RECEIVED' end,
+        recruiter_ready=false,updated_at=now()
     where id=v_job and agency_id=v_agency;
     perform private.xzrecruiter_log_activity(
       v_agency,v_user,'job',v_job,'requirement.ai_brief_failed','AI JD analysis failed',
@@ -575,6 +577,26 @@ begin
   where id=p_brief_id and agency_id=v_agency and brief_status not in ('APPROVED','SUPERSEDED');
   if v_job is null then return jsonb_build_object('ok',false,'error','brief_not_editable'); end if;
 
+  v_before := v_before || jsonb_build_object(
+    'criteria',coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id',c.id,'kind',c.criterion_kind,'label',c.label,'field',c.field_key,'value',c.value_text,
+        'confidence',c.confidence,'evidence',c.evidence,'status',c.extraction_status,
+        'enforcement',c.enforcement,'requiresAmConfirmation',c.requires_am_confirmation,'amConfirmed',c.am_confirmed
+      ) order by c.sort_order,c.created_at)
+      from public.requirement_criteria c
+      where c.agency_id=v_agency and c.brief_id=p_brief_id
+    ),'[]'::jsonb),
+    'clarifications',coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id',q.id,'type',q.issue_type,'field',q.field_key,'question',q.question,'evidence',q.evidence,
+        'blocking',q.blocking,'resolved',q.resolved,'resolution',q.resolution
+      ) order by q.created_at)
+      from public.requirement_clarifications q
+      where q.agency_id=v_agency and q.brief_id=p_brief_id
+    ),'[]'::jsonb)
+  );
+
   update public.requirement_hiring_briefs
   set structured_data=p_structured_data,hiring_brief=p_hiring_brief,search_blueprint=p_search_blueprint,
       brief_status=v_state,updated_at=now()
@@ -632,7 +654,11 @@ begin
     agency_id,job_id,brief_id,actor_user_id,action,before_value,after_value,reason
   ) values(
     v_agency,v_job,p_brief_id,v_user,'requirement.brief_edited',v_before,
-    jsonb_build_object('structured_data',p_structured_data,'hiring_brief',p_hiring_brief,'search_blueprint',p_search_blueprint,'brief_status',v_state),
+    jsonb_build_object(
+      'structured_data',p_structured_data,'hiring_brief',p_hiring_brief,'search_blueprint',p_search_blueprint,
+      'brief_status',v_state,'criteria',coalesce(p_criteria,'[]'::jsonb),
+      'clarifications',coalesce(p_clarifications,'[]'::jsonb)
+    ),
     nullif(left(coalesce(p_reason,''),1000),'')
   );
 
@@ -696,7 +722,7 @@ set search_path='public','private','extensions','pg_temp'
 as $fn$
 declare
   v_agency uuid;v_user uuid;v_membership_role text;v_business_role text;v_job uuid;v_data jsonb;v_brief jsonb;
-  v_title text;v_work_model text;v_openings integer;v_min numeric;v_max numeric;v_comp_min numeric;v_comp_max numeric;
+  v_title text;v_work_model text;v_country text;v_openings integer;v_min numeric;v_max numeric;v_comp_min numeric;v_comp_max numeric;
 begin
   select agency_id,user_id,role into v_agency,v_user,v_membership_role
   from private.xzrecruiter_session_context(p_token);
@@ -734,6 +760,12 @@ begin
   where id=p_brief_id and agency_id=v_agency;
 
   v_work_model=upper(coalesce(v_data#>>'{workModel,value}',''));
+  v_country=nullif(upper(btrim(coalesce(v_data#>>'{country,value}',''))),'');
+  if v_country is not null and not exists(
+    select 1 from public.global_country_profiles where country_code=v_country and active=true
+  ) then
+    v_country:=null;
+  end if;
   begin v_openings=nullif(v_data#>>'{openings,value}','')::integer; exception when others then v_openings:=null; end;
   begin v_min=nullif(v_data#>>'{experience,value,minYears}','')::numeric; exception when others then v_min:=null; end;
   begin v_max=nullif(v_data#>>'{experience,value,maxYears}','')::numeric; exception when others then v_max:=null; end;
@@ -751,7 +783,7 @@ begin
     remote_allowed=case when v_work_model='REMOTE' then true when v_work_model='ONSITE' then false else remote_allowed end,
     city=coalesce(nullif(v_data#>>'{city,value}',''),city),
     region=coalesce(nullif(v_data#>>'{state,value}',''),region),
-    country_code=coalesce(nullif(upper(v_data#>>'{country,value}'),''),country_code),
+    country_code=coalesce(v_country,country_code),
     experience_min=coalesce(v_min,experience_min),
     experience_max=coalesce(v_max,experience_max),
     skills_required=case when jsonb_typeof(v_data#>'{mandatorySkills,value}')='array' then v_data#>'{mandatorySkills,value}' else skills_required end,
