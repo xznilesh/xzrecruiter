@@ -141,7 +141,7 @@ set search_path='public','private','extensions','pg_temp'
 as $fn$
 declare
   v_agency uuid;v_user uuid;v_membership_role text;v_business_role text;v_app uuid;
-  v_candidate jsonb;v_match jsonb;v_history jsonb;v_dupes jsonb;v_profile jsonb;v_source jsonb;v_job jsonb;
+  v_candidate jsonb;v_match jsonb;v_history jsonb;v_dupes jsonb;v_profile jsonb;v_source jsonb;v_job jsonb;v_jobrun jsonb;
 begin
   select agency_id,user_id,role into v_agency,v_user,v_membership_role
   from private.xzrecruiter_session_context(p_token);
@@ -183,6 +183,14 @@ begin
     order by (m.id=a.current_candidate_match_id) desc,m.generated_at desc limit 1
   ) x;
 
+  select to_jsonb(x) into v_jobrun from (
+    select id,run_status,model_requested,model_resolved,prompt_version,schema_version,scoring_version,
+      attempt_count,retry_count,latency_ms,error_code,started_at,completed_at
+    from public.candidate_intelligence_jobs
+    where agency_id=v_agency and application_id=v_app
+    order by started_at desc limit 1
+  ) x;
+
   select coalesce(jsonb_agg(to_jsonb(x) order by x.generated_at desc),'[]'::jsonb) into v_history from (
     select id,score,match_band,confidence,hard_rule_status,brief_version,scoring_version,generated_at,run_status,stale_reason
     from public.candidate_match_runs
@@ -203,7 +211,8 @@ begin
   return jsonb_build_object(
     'ok',true,'business_role',v_business_role,'application_id',v_app,'job',v_job,'candidate',v_candidate,
     'source',coalesce(v_source,'{}'::jsonb),'profile',coalesce(v_profile,'{}'::jsonb),
-    'match',coalesce(v_match,'{}'::jsonb),'history',v_history,'duplicates',v_dupes
+    'match',coalesce(v_match,'{}'::jsonb),'analysis_job',coalesce(v_jobrun,'{}'::jsonb),
+    'history',v_history,'duplicates',v_dupes
   );
 end;
 $fn$;
