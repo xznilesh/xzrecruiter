@@ -135,6 +135,7 @@ create table if not exists public.candidate_match_runs (
   hard_rule_status text check (hard_rule_status is null or hard_rule_status in ('PASS','WARN','FAIL','UNKNOWN')),
   component_scores jsonb not null default '{}'::jsonb,
   hard_rule_results jsonb not null default '[]'::jsonb,
+  requirement_results jsonb not null default '[]'::jsonb,
   strengths jsonb not null default '[]'::jsonb,
   gaps jsonb not null default '[]'::jsonb,
   uncertainties jsonb not null default '[]'::jsonb,
