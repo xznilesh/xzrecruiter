@@ -140,6 +140,9 @@ as $$
           and ra.recruiter_user_id=p_user_id
           and ra.assignment_status='ACTIVE'
           and j.archived_at is null
+          and j.recruiter_ready=true
+          and j.requirement_state='OPEN'
+          and j.approved_hiring_brief_id is not null
       )
     else false
   end;
