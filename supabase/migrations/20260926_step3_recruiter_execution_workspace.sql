@@ -31,6 +31,10 @@ create table if not exists public.requirement_recruiter_assignments (
   recruiter_user_id uuid not null references public.users(id) on delete cascade,
   daily_target integer not null default 0 check (daily_target >= 0 and daily_target <= 1000),
   total_submission_target integer not null default 0 check (total_submission_target >= 0 and total_submission_target <= 10000),
+  assignment_priority text not null default 'NORMAL' check (assignment_priority in ('LOW','NORMAL','HIGH','URGENT')),
+  blocker_type text,
+  blocker_reason text,
+  blocker_owner_user_id uuid references public.users(id) on delete set null,
   assignment_status text not null default 'ACTIVE'
     check (assignment_status in ('ACTIVE','PAUSED','COMPLETED','REMOVED')),
   priority_context text,
@@ -408,12 +412,14 @@ begin
          coalesce(sum(case when x.remaining_target>0 or x.due_tasks_today>0 or x.screening_pending>0 or x.blocker_count>0 or x.status='ON_HOLD' then 1 else 0 end),0)::integer
   into v_requirements,v_target,v_done,v_due,v_screening,v_attention
   from (
-    select id assignment_id,job_id,recruiter_user_id,title,account_name,priority,openings,target_fill_date,status,
+    select id assignment_id,job_id,recruiter_user_id,title,account_name client_name,
+      assignment_priority priority,openings,target_fill_date deadline,status requirement_status,
       requirement_state,daily_submission_target requirement_daily_target,submission_target_total requirement_total_target,
-      daily_target assigned_daily_target,total_submission_target assigned_total_target,
+      daily_target,total_submission_target total_target,
       valid_submissions_today,valid_submissions_total,remaining_target,remaining_total_target,
       overdue_tasks,due_tasks_today,screening_pending,blocker_count,age_hours,priority_score,
-      priority_context,manager_instructions,brief_summary,must_haves,pipeline_candidates
+      priority_context,manager_instructions,blocker_type,blocker_reason,blocker_owner_user_id,
+      brief_summary,must_haves,pipeline_candidates
     from scored
     order by priority_score desc,remaining_target desc,title asc
     limit v_limit
@@ -486,7 +492,7 @@ as $fn$
 declare
   v_agency uuid;v_user uuid;v_membership_role text;v_business_role text;v_timezone text;v_local_date date;
   v_start timestamptz;v_end timestamptz;v_limit integer:=greatest(1,least(coalesce(p_queue_limit,50),100));
-  v_job jsonb;v_brief jsonb;v_criteria jsonb;v_assignment jsonb;v_assignments jsonb;v_recruiters jsonb;
+  v_job jsonb;v_brief jsonb;v_criteria jsonb;v_assignment jsonb;v_assignments jsonb;v_recruiters jsonb;v_action_owners jsonb;
   v_queue jsonb;v_tasks jsonb;v_blockers jsonb;v_valid integer:=0;v_valid_total integer:=0;v_target integer:=0;v_total_target integer:=0;
 begin
   select agency_id,user_id,role into v_agency,v_user,v_membership_role
@@ -507,7 +513,8 @@ begin
     'salary_min',j.salary_min,'salary_max',j.salary_max,'salary_currency',j.salary_currency,'salary_period',j.salary_period,
     'experience_min',j.experience_min,'experience_max',j.experience_max,'work_authorization_requirements',j.work_authorization_requirements,
     'requirement_state',j.requirement_state,'recruiter_ready',j.recruiter_ready,
-    'daily_submission_target',j.daily_submission_target,'submission_target_total',j.submission_target_total,
+    'daily_submission_target',j.daily_submission_target,'submission_target_daily',j.daily_submission_target,
+    'submission_target_total',j.submission_target_total,
     'approved_hiring_brief_id',j.approved_hiring_brief_id
   )
   into v_job
@@ -536,7 +543,8 @@ begin
 
   select to_jsonb(x) into v_assignment
   from (
-    select ra.id,ra.daily_target,ra.total_submission_target,ra.assignment_status,ra.priority_context,ra.manager_instructions,
+    select ra.id,ra.daily_target,ra.total_submission_target total_target,ra.assignment_priority priority,
+      ra.blocker_type,ra.blocker_reason,ra.blocker_owner_user_id,ra.assignment_status,ra.priority_context,ra.manager_instructions,
       ra.assigned_at,ra.recruiter_user_id,u.display_name recruiter_name
     from public.requirement_recruiter_assignments ra
     left join public.users u on u.id=ra.recruiter_user_id
@@ -550,8 +558,9 @@ begin
     select coalesce(jsonb_agg(to_jsonb(x) order by x.recruiter_name),'[]'::jsonb)
     into v_assignments
     from (
-      select ra.id,ra.recruiter_user_id,u.display_name recruiter_name,ra.daily_target,ra.total_submission_target,ra.assignment_status,
-        ra.priority_context,ra.manager_instructions,ra.assigned_at,ra.updated_at
+      select ra.id,ra.recruiter_user_id,u.display_name recruiter_name,ra.daily_target,
+        ra.total_submission_target total_target,ra.assignment_priority priority,ra.blocker_type,ra.blocker_reason,
+        ra.blocker_owner_user_id,ra.assignment_status,ra.priority_context,ra.manager_instructions,ra.assigned_at,ra.updated_at
       from public.requirement_recruiter_assignments ra
       left join public.users u on u.id=ra.recruiter_user_id
       where ra.agency_id=v_agency and ra.job_id=p_job_id
@@ -566,8 +575,20 @@ begin
       where am.agency_id=v_agency
         and private.xzrecruiter_business_role(v_agency,am.user_id,am.role)='RECRUITER'
     ) x;
+
+    select coalesce(jsonb_agg(to_jsonb(x) order by x.display_name),'[]'::jsonb)
+    into v_action_owners
+    from (
+      select am.user_id,u.display_name,u.email,
+        private.xzrecruiter_business_role(v_agency,am.user_id,am.role) business_role
+      from public.agency_memberships am
+      join public.users u on u.id=am.user_id
+      where am.agency_id=v_agency
+        and private.xzrecruiter_business_role(v_agency,am.user_id,am.role)
+          in ('OWNER','ADMIN','RECRUITMENT_MANAGER','ACCOUNT_MANAGER','RECRUITER')
+    ) x;
   else
-    v_assignments:='[]'::jsonb;v_recruiters:='[]'::jsonb;
+    v_assignments:='[]'::jsonb;v_recruiters:='[]'::jsonb;v_action_owners:='[]'::jsonb;
   end if;
 
   select coalesce(jsonb_agg(to_jsonb(x) order by x.last_activity_at desc),'[]'::jsonb)
@@ -616,6 +637,14 @@ begin
   select coalesce(jsonb_agg(to_jsonb(x) order by x.owner,x.reason),'[]'::jsonb)
   into v_blockers
   from (
+    select coalesce(u.display_name,'MANAGER')::text owner,ra.blocker_reason::text reason,
+      coalesce(nullif(ra.blocker_type,''),'ASSIGNMENT_BLOCKER')::text blocker_type
+    from public.requirement_recruiter_assignments ra
+    left join public.users u on u.id=ra.blocker_owner_user_id
+    where ra.agency_id=v_agency and ra.job_id=p_job_id and ra.assignment_status='ACTIVE'
+      and nullif(btrim(coalesce(ra.blocker_reason,'')),'') is not null
+      and (v_business_role<>'RECRUITER' or ra.recruiter_user_id=v_user)
+    union all
     select 'ACCOUNT_MANAGER'::text owner,'Requirement is on hold'::text reason,'REQUIREMENT_ON_HOLD'::text blocker_type
     where (v_job->>'status')='ON_HOLD'
     union all
@@ -677,6 +706,7 @@ begin
     'job',v_job,'brief',coalesce(v_brief,'{}'::jsonb),'criteria',coalesce(v_criteria,'[]'::jsonb),
     'assignment',coalesce(v_assignment,'{}'::jsonb),'assignments',coalesce(v_assignments,'[]'::jsonb),
     'eligible_recruiters',coalesce(v_recruiters,'[]'::jsonb),
+    'eligible_action_owners',coalesce(v_action_owners,'[]'::jsonb),
     'execution',jsonb_build_object(
       'daily_target',v_target,'valid_submissions_today',coalesce(v_valid,0),
       'remaining_target',greatest(0,v_target-coalesce(v_valid,0)),
