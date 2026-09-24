@@ -137,14 +137,14 @@ begin
   v_match:=gen_random_uuid();
   insert into public.candidate_match_runs(
     id,agency_id,job_id,candidate_id,application_id,intelligence_job_id,brief_id,brief_version,profile_version_id,
-    scoring_config_id,scoring_version,model_name,prompt_version,schema_version,input_hash,run_status,score,match_band,
+    scoring_config_id,scoring_version,model_name,prompt_version,schema_version,match_schema_version,input_hash,run_status,score,match_band,
     confidence,coverage,hard_rule_status,component_scores,hard_rule_results,strengths,gaps,uncertainties,evidence_meta,
     recommendation
   )
   select
     v_match,v_agency,v_run.job_id,v_run.candidate_id,v_run.application_id,v_run.id,v_run.brief_id,hb.version_number,v_profile,
     nullif(v_scoring->>'id','')::uuid,v_run.scoring_version,nullif(left(coalesce(p_ai_meta->>'model',''),120),''),
-    v_run.prompt_version,v_run.schema_version,v_run.input_hash,'SUCCEEDED',
+    v_run.prompt_version,v_run.schema_version,'xz-candidate-match-v1',v_run.input_hash,'SUCCEEDED',
     nullif(p_match_json->>'score','')::numeric,nullif(p_match_json->>'band',''),
     nullif(p_match_json->>'confidence','')::numeric,nullif(p_match_json->>'coverage','')::numeric,
     nullif(p_match_json->>'hardRuleStatus',''),coalesce(p_match_json->'components','{}'::jsonb),
