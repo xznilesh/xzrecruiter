@@ -67,7 +67,7 @@ export default function RecruiterCommandCenter({initialContext}){
         <div className="rx-list">{tasks.length?tasks.map(t=><article key={t.id} className={t.overdue?'overdue':''}><div><b>{t.title}</b><span>{t.job_title||'Requirement'}{t.candidate_name?' · '+t.candidate_name:''}</span><small>{fmtWhen(t.due_at,ctx.timezone)} · {String(t.task_type||'TASK').replaceAll('_',' ')}</small></div><button onClick={()=>completeTask(t.id)} disabled={state==='saving'}>Done</button></article>):<div className="rx-empty compact">No open recruiter tasks.</div>}</div>
       </section>
       <section className="rx-section"><div className="rx-section-head"><div><h2>Interview actions</h2><p>Already-supported interview events on assigned work.</p></div></div>
-        <div className="rx-list">{interviews.length?interviews.map(i=><article key={i.id}><div><b>{i.candidate_name}</b><span>{i.job_title}</span><small>{fmtWhen(i.scheduled_at,i.timezone||ctx.timezone)}</small></div><Link href={'/pipeline?job='+i.job_id}>Open</Link></article>):<div className="rx-empty compact">No near-term interview actions.</div>}</div>
+        <div className="rx-list">{interviews.length?interviews.map(i=><article key={i.id}><div><b>{i.candidate_name}</b><span>{i.job_title}</span><small>{fmtWhen(i.scheduled_at,i.timezone||ctx.timezone)}</small></div><Link href={'/recruiter/requirements/'+i.job_id}>Open role</Link></article>):<div className="rx-empty compact">No near-term interview actions.</div>}</div>
       </section>
     </div>
     {state!=='idle'&&state!=='saving'&&state!=='saved'?<div className="save-error">Action failed: {state}</div>:null}
