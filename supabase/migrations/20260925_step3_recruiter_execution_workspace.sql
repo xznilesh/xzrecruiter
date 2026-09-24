@@ -127,6 +127,11 @@ as $$
       then exists(select 1 from public.recruitment_jobs j where j.id=p_job_id and j.agency_id=p_agency_id and j.archived_at is null)
     when upper(coalesce(p_business_role,''))='RECRUITER'
       then private.xzrecruiter_is_assigned_recruiter(p_agency_id,p_user_id,p_job_id)
+        and exists(
+          select 1 from public.recruitment_jobs j
+          where j.id=p_job_id and j.agency_id=p_agency_id and j.archived_at is null
+            and j.recruiter_ready=true and j.requirement_state='OPEN'
+        )
     else false
   end;
 $$;
@@ -247,6 +252,11 @@ begin
         where cs.agency_id=v_agency and ap.job_id=j.id and cs.created_by_user_id=v_user
           and cs.workflow_status='CLIENT_SUBMITTED' and cs.status='SUBMITTED'
           and cs.invalidated_at is null and cs.withdrawn_at is null
+          and upper(coalesce(ap.stage,'')) not in ('WITHDRAWN','REJECTED')
+          and not exists(
+            select 1 from public.pipeline_stages vps
+            where vps.id=ap.stage_id and vps.agency_id=v_agency and upper(vps.code) in ('WITHDRAWN','REJECTED')
+          )
           and cs.client_submitted_at is not null
           and (cs.client_submitted_at at time zone v_timezone)::date=v_today
       ),0)::integer valid_today,
@@ -377,7 +387,7 @@ as $fn$
 declare
   v_agency uuid;v_user uuid;v_membership_role text;v_business_role text;v_timezone text;v_today date;
   v_job jsonb;v_brief jsonb;v_criteria jsonb;v_assignment jsonb;v_queue jsonb;v_tasks jsonb;
-  v_valid integer:=0;v_target integer:=0;v_members jsonb:='[]'::jsonb;
+  v_valid integer:=0;v_target integer:=0;v_members jsonb:='[]'::jsonb;v_owners jsonb:='[]'::jsonb;
 begin
   select agency_id,user_id,role into v_agency,v_user,v_membership_role
   from private.xzrecruiter_session_context(p_token);
@@ -446,6 +456,11 @@ begin
   where cs.agency_id=v_agency and ap.job_id=p_job_id and cs.created_by_user_id=v_user
     and cs.workflow_status='CLIENT_SUBMITTED' and cs.status='SUBMITTED'
     and cs.invalidated_at is null and cs.withdrawn_at is null
+    and upper(coalesce(ap.stage,'')) not in ('WITHDRAWN','REJECTED')
+    and not exists(
+      select 1 from public.pipeline_stages vps
+      where vps.id=ap.stage_id and vps.agency_id=v_agency and upper(vps.code) in ('WITHDRAWN','REJECTED')
+    )
     and cs.client_submitted_at is not null
     and (cs.client_submitted_at at time zone v_timezone)::date=v_today;
 
@@ -497,12 +512,19 @@ begin
     from public.agency_memberships m join public.users u on u.id=m.user_id
     where m.agency_id=v_agency
       and private.xzrecruiter_business_role(m.agency_id,m.user_id,m.role) in ('RECRUITER','RECRUITMENT_MANAGER');
+    select coalesce(jsonb_agg(jsonb_build_object(
+      'user_id',m.user_id,'display_name',coalesce(u.display_name,u.email),
+      'business_role',private.xzrecruiter_business_role(m.agency_id,m.user_id,m.role)
+    ) order by coalesce(u.display_name,u.email)),'[]'::jsonb)
+    into v_owners
+    from public.agency_memberships m join public.users u on u.id=m.user_id
+    where m.agency_id=v_agency;
   end if;
 
   return jsonb_build_object(
     'ok',true,'business_role',v_business_role,'timezone',v_timezone,'business_date',v_today,
     'job',v_job,'brief',coalesce(v_brief,'{}'::jsonb),'criteria',coalesce(v_criteria,'[]'::jsonb),
-    'assignments',coalesce(v_assignment,'[]'::jsonb),'eligible_recruiters',v_members,
+    'assignments',coalesce(v_assignment,'[]'::jsonb),'eligible_recruiters',v_members,'eligible_action_owners',v_owners,
     'can_manage_assignments',v_business_role in ('OWNER','ADMIN','ACCOUNT_MANAGER','RECRUITMENT_MANAGER'),
     'blockers',coalesce((
       select jsonb_agg(jsonb_build_object(
