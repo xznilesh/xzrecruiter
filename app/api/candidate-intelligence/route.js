@@ -75,7 +75,16 @@ export async function POST(req){
     const model=candidateAiConfigured()
       ?(process.env.XZRECRUITER_CANDIDATE_MODEL||process.env.XZRECRUITER_JD_MODEL||'gpt-5.6-terra')
       :'LOCAL_FALLBACK';
-    const inputHash=createCandidateInputHash({resumeText,candidateProfile:candidate,requirementContext:approved});
+    const sourceMeta={
+      candidateUpdatedAt:candidate.updated_at||null,
+      parseRunId:parseRun.id||null,
+      parseUpdatedAt:parseRun.updated_at||null,
+      documentId:parseRun.document_id||null,
+      documentVersion:parseRun.document_version||null,
+      documentChecksum:parseRun.checksum||null,
+      briefFingerprint:input?.brief?.source_fingerprint||null
+    };
+    const inputHash=createCandidateInputHash({resumeText,candidateProfile:candidate,requirementContext:approved,sourceMeta});
     const scoringVersion=String(input?.scoring?.version||SCORING_CONFIG_VERSION);
     const idempotencyKey=candidateMatchIdempotencyKey({
       agencyId:input.agency_id,jobId,candidateId,briefId:input?.brief?.id,
@@ -105,7 +114,7 @@ export async function POST(req){
         aiMeta={
           model:result.resolvedModel,providerResponseId:result.providerResponseId,
           promptVersion:result.promptVersion,schemaVersion:result.schemaVersion,usage:result.usage||null,
-          attempt:result.attempt,inputHash:result.inputHash
+          attempt:result.attempt,inputHash
         };
       }catch(error){
         const code=String(error?.code||error?.message||'candidate_ai_analysis_failed').slice(0,120);
