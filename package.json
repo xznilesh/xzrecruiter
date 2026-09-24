@@ -19,7 +19,8 @@
     "test:step5": "node scripts/step5-tests.mjs",
     "test:step5:security": "node scripts/step5-security-tests.mjs",
     "test:step5:portals": "node scripts/step5-portals-tests.mjs",
-    "test:step5:performance": "node scripts/step5-performance-guard.mjs"
+    "test:step5:performance": "node scripts/step5-performance-guard.mjs",
+    "test:step1:contract": "node scripts/step1-workflow-contract-tests.mjs"
   },
   "dependencies": {
     "mammoth": "1.9.1",
