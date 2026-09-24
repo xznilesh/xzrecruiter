@@ -26,7 +26,10 @@ for(const token of [
   'requirement_clarifications','requirement_brief_audit','xzrecruiter_prepare_jd_source',
   'xzrecruiter_begin_jd_ai_run','xzrecruiter_complete_jd_ai_run','xzrecruiter_approve_hiring_brief',
   "requirement_state='AM_REVIEW'","requirement_state='OPEN'","recruiter_ready=true",
-  'agency_id=v_agency','idempotency_key'
+  'agency_id=v_agency','idempotency_key',"v_started_at > now()-interval '5 minutes'",
+  "criterion_kind='HARD_REQUIREMENT'","am_confirmed=false",
+  "'criteria',coalesce((","'clarifications',coalesce((",
+  "country_code=coalesce(v_country,country_code)"
 ])assert.ok(sql.includes(token),`missing integration contract ${token}`);
 assert.ok(!/\bdrop\s+table\b|\btruncate\b|alter\s+table\s+[^;]+\s+drop\s+column/i.test(sql));
 console.log('STEP2_JD_INTEGRATION_PASS retry=true persistence_contract=true versioning=true tenant_scope=true');
