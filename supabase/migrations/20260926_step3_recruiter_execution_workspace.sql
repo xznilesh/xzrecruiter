@@ -1105,14 +1105,14 @@ begin
   ) then return jsonb_build_object('ok',false,'error','candidate_access_forbidden'); end if;
 
   update public.candidate_parse_runs
-  set status=case when p_error is null then 'SUCCEEDED' else 'FAILED' end,
+  set status=case when p_error is null then 'COMPLETED' else 'FAILED' end,
       extracted_data=case when p_error is null then coalesce(p_extracted_data,'{}'::jsonb) else extracted_data end,
       field_confidence=case when p_error is null then coalesce(p_field_confidence,'{}'::jsonb) else field_confidence end,
       field_evidence=case when p_error is null then coalesce(p_field_evidence,'{}'::jsonb) else field_evidence end,
       error_message=nullif(left(coalesce(p_error,''),500),''),
       updated_at=now()
   where id=p_parse_run_id and agency_id=v_agency;
-  return jsonb_build_object('ok',true,'status',case when p_error is null then 'SUCCEEDED' else 'FAILED' end);
+  return jsonb_build_object('ok',true,'status',case when p_error is null then 'COMPLETED' else 'FAILED' end);
 end;
 $fn$;
 
