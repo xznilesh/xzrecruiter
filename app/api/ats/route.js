@@ -8,10 +8,10 @@ function sameOrigin(req) {
 
 function statusFor(error) {
   if (error === 'unauthorized') return 401;
-  if (error === 'forbidden' || error === 'stage_role_forbidden' || error === 'recruiter_only' || error === 'am_only') return 403;
+  if (error === 'forbidden' || error === 'stage_role_forbidden' || error === 'recruiter_only' || error === 'am_only' || error === 'interview_role_forbidden' || error === 'offer_role_forbidden' || error === 'joining_role_forbidden' || error === 'approval_forbidden') return 403;
   if (error === 'not_found' || error?.endsWith?.('_not_found')) return 404;
   if (error === 'possible_duplicate' || error === 'application_exists' || error === 'placement_exists' || error === 'already_applied' || error === 'am_review_pending') return 409;
-  if (error === 'stage_requirements_missing' || error === 'rejection_reason_required' || error === 'withdrawal_reason_required' || error === 'invalid_workflow_transition' || error === 'am_quality_gate_required' || error === 'submission_not_am_approved' || error === 'review_reason_required' || error === 'noncanonical_stage') return 422;
+  if (error === 'stage_requirements_missing' || error === 'rejection_reason_required' || error === 'withdrawal_reason_required' || error === 'invalid_workflow_transition' || error === 'am_quality_gate_required' || error === 'submission_not_am_approved' || error === 'review_reason_required' || error === 'noncanonical_stage' || error === 'accepted_offer_required' || error === 'invalid_offer_state' || error === 'offer_must_be_approved') return 422;
   return 400;
 }
 
