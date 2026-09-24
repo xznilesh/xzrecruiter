@@ -634,7 +634,7 @@ begin
     from public.candidate_submissions cs
     join public.applications a on a.id=cs.application_id and a.agency_id=v_agency
     left join public.pipeline_stages psx on psx.id=a.stage_id and psx.agency_id=v_agency
-    where cs.agency_id=v_agency and cs.job_id=p_job_id and a.owner_user_id=v_user
+    where cs.agency_id=v_agency and cs.job_id=p_job_id
       and cs.workflow_status='CLIENT_SUBMITTED' and cs.status='SUBMITTED'
       and cs.invalidated_at is null and cs.withdrawn_at is null
       and cs.created_by_user_id=v_user
