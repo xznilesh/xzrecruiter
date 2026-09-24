@@ -33,7 +33,7 @@ for(const token of [
   'agency_id=v_agency',
   'cs.agency_id=v_agency',
   'a.agency_id=v_agency',
-  'o.agency_id=v_agency',
+  'where id=p_offer_id and agency_id=v_agency',
   'where id=p_submission_id and agency_id=v_agency',
 ]) assert.ok(migration.includes(token), `tenant scoping invariant missing: ${token}`);
 
