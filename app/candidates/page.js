@@ -1,6 +1,7 @@
 import AppShell from '@/app/components/AppShell';
 import CandidateWorkspace from '@/app/components/CandidateWorkspace';
 import { requireReadyWorkspace } from '@/lib/workspace-ready';
+import { redirectRecruiterFromLegacyWorkspace } from '@/lib/recruiter-access';
 import { getCandidateSearch, getSavedViews } from '@/lib/ats';
 
 export const dynamic='force-dynamic';
@@ -8,6 +9,7 @@ export const dynamic='force-dynamic';
 export default async function CandidatesPage({searchParams}){
   const params=await searchParams;
   const {user,globalContext}=await requireReadyWorkspace();
+  await redirectRecruiterFromLegacyWorkspace();
   const page=Math.max(1,Number(params?.page||1));
   const limit=50;
   const filters={

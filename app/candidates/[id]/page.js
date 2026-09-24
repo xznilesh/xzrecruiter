@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import AppShell from '@/app/components/AppShell';
 import CandidateProfileEditor from '@/app/components/CandidateProfileEditor';
 import { requireReadyWorkspace } from '@/lib/workspace-ready';
+import { redirectRecruiterFromLegacyWorkspace } from '@/lib/recruiter-access';
 import { atsAction } from '@/lib/ats';
 
 export const dynamic='force-dynamic';
@@ -9,6 +10,7 @@ export const dynamic='force-dynamic';
 export default async function CandidateProfilePage({params}){
   const {id}=await params;
   const {user,globalContext}=await requireReadyWorkspace();
+  await redirectRecruiterFromLegacyWorkspace();
   const result=await atsAction('candidateProfileContext',{candidateId:id}).catch(()=>null);
   if(!result?.ok||!result.profile)notFound();
   const p=result.profile;

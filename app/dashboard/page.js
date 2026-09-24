@@ -6,6 +6,7 @@ import { getGlobalContext } from '@/lib/global-context';
 import { getOnboardingContext } from '@/lib/onboarding';
 import { rpc } from '@/lib/supabase-api';
 import { formatDateTime } from '@/lib/globalization';
+import { redirectRecruiterFromLegacyWorkspace } from '@/lib/recruiter-access';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +30,7 @@ export default async function Dashboard({ searchParams }) {
   if (!globalContext?.settings) redirect('/login?error=service');
   if (!onboarding) redirect('/onboarding?error=setup');
   if (onboarding.progress?.status !== 'COMPLETED') redirect('/onboarding');
+  await redirectRecruiterFromLegacyWorkspace();
 
   const token = await sessionToken();
   let d = { metrics: { companies: 0, jobs: 0, hot: 0, clients: 0, candidates: 0 }, signals: [], pipeline: [] };

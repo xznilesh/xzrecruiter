@@ -28,7 +28,14 @@
     "test:step2:jd:e2e": "node scripts/step2-jd-e2e-tests.mjs",
     "test:step2:jd:security": "node scripts/step2-jd-security-tests.mjs",
     "test:step2:jd:regression": "node scripts/step2-jd-regression-tests.mjs",
-    "test:step2:jd:live": "node scripts/step2-jd-live-eval.mjs"
+    "test:step2:jd:live": "node scripts/step2-jd-live-eval.mjs",
+    "check:step3:execution:syntax": "node scripts/step3-execution-static-check.mjs",
+    "test:step3:execution:unit": "node scripts/step3-execution-unit-tests.mjs",
+    "test:step3:execution:integration": "node scripts/step3-execution-integration-tests.mjs",
+    "test:step3:execution:e2e": "node scripts/step3-execution-e2e-tests.mjs",
+    "test:step3:execution:security": "node scripts/step3-execution-security-tests.mjs",
+    "test:step3:execution:performance": "node scripts/step3-execution-performance-tests.mjs",
+    "test:step3:execution:responsive": "node scripts/step3-execution-responsive-tests.mjs"
   },
   "dependencies": {
     "mammoth": "1.9.1",
