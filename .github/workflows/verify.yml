@@ -15,6 +15,7 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npm run lint
       - run: npm run test:step1:contract
+      - run: npm run test:step1:security
       - run: npm run test:step2
       - run: npm run test:step3
       - run: npm run test:step4
