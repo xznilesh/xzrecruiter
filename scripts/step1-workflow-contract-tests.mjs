@@ -131,6 +131,7 @@ for (const token of [
 ]) assert.ok(migration.includes(token), `migration contract missing ${token}`);
 
 assert.ok(migration.includes('revoke execute on function public.xzrecruiter_move_application_stage'), 'unguarded legacy stage movement must be revoked');
+assert.ok(migration.includes("v_workflow_status in ('AM_APPROVED','AM_REJECTED','CLIENT_SUBMITTED')"), 'terminal submission states must not reopen as fresh recruiter drafts');
 assert.ok(ats.includes("moveApplication: ['xzrecruiter_move_application_workflow'"), 'API wrapper must use canonical transition guard');
 assert.ok(ats.includes('reviewInternalSubmission') && ats.includes('markClientSubmitted'), 'AM review/client release API boundaries missing');
 assert.ok(drawer.includes('Internal submission') && drawer.includes('Submit to AM'), 'recruiter handoff copy missing');
