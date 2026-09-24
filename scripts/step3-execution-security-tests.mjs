@@ -11,6 +11,7 @@ assert.ok(sql.includes('alter table public.requirement_recruiter_assignments ena
 assert.ok(sql.includes("policy xzrecruiter_data_api_deny"));
 assert.ok((sql.match(/agency_id=v_agency/g)||[]).length>=30,'tenant scoping should be pervasive');
 assert.ok(sql.includes("ra.recruiter_user_id=v_user")&&sql.includes("ra.assignment_status='ACTIVE'"),'assignment scope missing');
+assert.ok(sql.includes('j.recruiter_ready=true')&&sql.includes("j.requirement_state='OPEN'")&&sql.includes('j.approved_hiring_brief_id is not null'),'recruiter access must be revoked when Step-2 requirement is no longer approved/recruiter-ready');
 assert.ok(sql.includes('requirement_access_forbidden'));
 assert.ok(sql.includes('candidate_access_forbidden'));
 assert.ok(sql.includes('recruiter_self_assignment_only'));
