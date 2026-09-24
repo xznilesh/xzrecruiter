@@ -31,8 +31,8 @@ export default function RecruiterRequirementWorkspace({initialContext,jobId}){
  const[search,setSearch]=useState('');const[searchRows,setSearchRows]=useState([]);const[searching,setSearching]=useState(false);
  const intakeKeyRef=useRef(uid());const taskKeyRef=useRef(uid());const assignmentKeyRef=useRef(uid());
  const[task,setTask]=useState({taskType:'FOLLOW_UP',title:'Follow up with candidate',dueLocal:'',priority:'NORMAL',candidateId:'',applicationId:'',description:''});
- const[assignment,setAssignment]=useState({recruiterUserId:'',dailyTarget:'1',status:'ACTIVE',priorityContext:'',managerInstructions:''});
- const[requirementTarget,setRequirementTarget]=useState(String(initialContext?.job?.daily_submission_target||0));
+ const[assignment,setAssignment]=useState({recruiterUserId:'',dailyTarget:'1',totalTarget:'0',status:'ACTIVE',priority:'NORMAL',managerInstructions:'',blockerType:'',blockerReason:'',blockerOwnerUserId:''});
+ const[requirementTargets,setRequirementTargets]=useState({daily:String(initialContext?.job?.submission_target_daily||0),total:String(initialContext?.job?.submission_target_total||0)});
 
  const job=ctx.job||{};const briefMeta=ctx.brief||{};const brief=briefMeta.hiring_brief||{};const blueprint=briefMeta.search_blueprint||{};
  const criteria=list(ctx.criteria);const execution=ctx.execution||{};const tasks=list(ctx.tasks);const queue=list(ctx.queue);const blockers=list(ctx.blockers);
@@ -50,7 +50,7 @@ export default function RecruiterRequirementWorkspace({initialContext,jobId}){
  async function refresh(){
    const res=await fetch('/api/recruiter?mode=requirement&jobId='+encodeURIComponent(jobId),{cache:'no-store'});
    const data=await res.json().catch(()=>null);
-   if(data?.ok){setCtx(data);setRequirementTarget(String(data.job?.daily_submission_target||0))}
+   if(data?.ok){setCtx(data);setRequirementTargets({daily:String(data.job?.submission_target_daily||0),total:String(data.job?.submission_target_total||0)})}
  }
 
  async function searchExisting(){
@@ -84,7 +84,7 @@ export default function RecruiterRequirementWorkspace({initialContext,jobId}){
      setIntakeOpen(false);setResume(null);intakeKeyRef.current=uid();if(fileRef.current)fileRef.current.value='';
      setIntake({candidateId:'',fullName:'',email:'',phone:'',currentTitle:'',currentCompany:'',sourceType:'LINKEDIN',sourceReference:'',sourcingNotes:''});
      await refresh();setState('saved');setMessage(data.already_associated?'Candidate was already on this requirement; existing candidacy reused.':data.reused?'Existing candidate reused and associated with this requirement.':'Candidate sourced and added to the requirement.');
-   }catch(e){setState('error');setMessage(e.message==='duplicate_requires_manager'?'A duplicate exists but is outside your authorized candidate scope. Ask a manager to review/reassign it.':e.message)}
+   }catch(e){setState('error');setMessage(e.message==='existing_candidate_found'?'An existing candidate with this contact already exists. Search internal talent and reuse that record instead of creating a duplicate.':e.message==='candidate_intake_conflict'?'Candidate intake was retried concurrently. Refresh/search internal talent before retrying.':e.message)}
  }
 
  function taskFor(row,type='FOLLOW_UP'){
@@ -102,14 +102,14 @@ export default function RecruiterRequirementWorkspace({initialContext,jobId}){
 
  async function completeTask(id){
    setState('saving');
-   try{await post({action:'setTaskStatus',taskId:id,status:'DONE'});await refresh();setState('saved');setMessage('Task completed.')}
+   try{await post({action:'completeTask',taskId:id});await refresh();setState('saved');setMessage('Task completed.')}
    catch(e){setState('error');setMessage(e.message)}
  }
 
  async function saveAssignment(){
    setState('saving');setMessage('');
    try{
-     await post({action:'saveAssignment',jobId,...assignment,idempotencyKey:assignmentKeyRef.current});assignmentKeyRef.current=uid();
+     await post({action:'saveAssignment',jobId,...assignment,requirementDailyTarget:Number(requirementTargets.daily||0),requirementTotalTarget:Number(requirementTargets.total||0)});assignmentKeyRef.current=uid();
      await refresh();setState('saved');setMessage('Recruiter assignment saved.');
    }catch(e){setState('error');setMessage(e.message)}
  }
@@ -117,8 +117,8 @@ export default function RecruiterRequirementWorkspace({initialContext,jobId}){
  async function saveRequirementTarget(){
    setState('saving');setMessage('');
    try{
-     await post({action:'setRequirementTarget',jobId,dailyTarget:Number(requirementTarget||0)});
-     await refresh();setState('saved');setMessage('Requirement daily target updated.');
+     await post({action:'setRequirementTargets',jobId,dailyTarget:Number(requirementTargets.daily||0),totalTarget:Number(requirementTargets.total||0)});
+     await refresh();setState('saved');setMessage('Requirement targets updated.');
    }catch(e){setState('error');setMessage(e.message)}
  }
 
@@ -172,7 +172,7 @@ export default function RecruiterRequirementWorkspace({initialContext,jobId}){
      <div className="rx-section-head"><div><span className="page-kicker">Work queue</span><h2>Candidates requiring recruiter action</h2><p>Same candidacy state powers the queue; there is no parallel recruiter pipeline.</p></div><div className="rx-queue-tabs">{QUEUES.map(q=><button key={q} className={queueFilter===q?'active':''} onClick={()=>setQueueFilter(q)}>{q.replaceAll('_',' ')}</button>)}</div></div>
      <div className="rx-work-list">{filteredQueue.length?filteredQueue.map(row=><article key={row.application_id} className={row.blocked?'blocked':''}>
        <div><b>{row.full_name}</b><span>{[row.current_title,row.current_company].filter(Boolean).join(' · ')||'Candidate'}</span><small>{row.source_type||'UNKNOWN SOURCE'}{row.sourced_at?' · sourced '+fmtDue(row.sourced_at,ctx.timezone):''}</small></div>
-       <div className="rx-work-state"><span>{row.queue_group.replaceAll('_',' ')}</span><small>{row.canonical_state}</small></div>
+       <div className="rx-work-state"><span>{String(row.queue_group||'SOURCING').replaceAll('_',' ')}</span><small>{String(row.canonical_state||row.stage_code||row.stage||'SOURCED').replaceAll('_',' ')}</small></div>
        <div className="rx-row-actions"><button onClick={()=>taskFor(row,'FOLLOW_UP')}>Follow-up</button><button onClick={()=>taskFor(row,'COLLECT_RESUME')}>Resume</button><button onClick={()=>taskFor(row,'SCREENING_DUE')}>Screening</button></div>
      </article>):<div className="rx-empty compact">No candidates in this queue. Source/add a candidate to begin execution.</div>}</div>
    </section>
@@ -191,10 +191,10 @@ export default function RecruiterRequirementWorkspace({initialContext,jobId}){
 
    {canManage?<section className="rx-section rx-manager-controls"><div className="rx-section-head"><div><span className="page-kicker">Manager controls</span><h2>Recruiter assignment & targets</h2><p>Operational assignment only; approved Hiring Brief remains protected.</p></div></div>
      <div className="rx-assignment-grid">
-       <div><h3>Requirement daily target</h3><div className="rx-inline"><input type="number" min="0" max="1000" value={requirementTarget} onChange={e=>setRequirementTarget(e.target.value)}/><button onClick={saveRequirementTarget}>Save target</button></div></div>
-       <div><h3>Assign recruiter</h3><div className="form-grid two"><label className="form-control"><span>Recruiter</span><select value={assignment.recruiterUserId} onChange={e=>setAssignment({...assignment,recruiterUserId:e.target.value})}><option value="">Choose recruiter</option>{list(ctx.eligible_recruiters).map(r=><option key={r.user_id} value={r.user_id}>{r.display_name||r.email}</option>)}</select></label><label className="form-control"><span>Daily target</span><input type="number" min="0" value={assignment.dailyTarget} onChange={e=>setAssignment({...assignment,dailyTarget:e.target.value})}/></label><label className="form-control"><span>Status</span><select value={assignment.status} onChange={e=>setAssignment({...assignment,status:e.target.value})}>{['ACTIVE','PAUSED','COMPLETED','REMOVED'].map(x=><option key={x}>{x}</option>)}</select></label><label className="form-control"><span>Priority/context</span><input value={assignment.priorityContext} onChange={e=>setAssignment({...assignment,priorityContext:e.target.value})}/></label><label className="form-control wide"><span>Manager instructions</span><textarea rows="3" value={assignment.managerInstructions} onChange={e=>setAssignment({...assignment,managerInstructions:e.target.value})}/></label></div><button className="primary-action" onClick={saveAssignment} disabled={!assignment.recruiterUserId}>Save assignment</button></div>
+       <div><h3>Requirement targets</h3><div className="rx-inline"><input aria-label="Requirement daily target" type="number" min="0" max="1000" value={requirementTargets.daily} onChange={e=>setRequirementTargets({...requirementTargets,daily:e.target.value})} placeholder="Daily"/><input aria-label="Requirement total target" type="number" min="0" max="10000" value={requirementTargets.total} onChange={e=>setRequirementTargets({...requirementTargets,total:e.target.value})} placeholder="Total"/><button onClick={saveRequirementTarget}>Save targets</button></div></div>
+       <div><h3>Assign recruiter</h3><div className="form-grid two"><label className="form-control"><span>Recruiter</span><select value={assignment.recruiterUserId} onChange={e=>setAssignment({...assignment,recruiterUserId:e.target.value})}><option value="">Choose recruiter</option>{list(ctx.eligible_recruiters).map(r=><option key={r.user_id} value={r.user_id}>{r.display_name||r.email}</option>)}</select></label><label className="form-control"><span>Daily target</span><input type="number" min="0" value={assignment.dailyTarget} onChange={e=>setAssignment({...assignment,dailyTarget:e.target.value})}/></label><label className="form-control"><span>Total target</span><input type="number" min="0" value={assignment.totalTarget} onChange={e=>setAssignment({...assignment,totalTarget:e.target.value})}/></label><label className="form-control"><span>Status</span><select value={assignment.status} onChange={e=>setAssignment({...assignment,status:e.target.value})}>{['ACTIVE','PAUSED','COMPLETED','REMOVED'].map(x=><option key={x}>{x}</option>)}</select></label><label className="form-control"><span>Priority</span><select value={assignment.priority} onChange={e=>setAssignment({...assignment,priority:e.target.value})}>{['LOW','NORMAL','HIGH','URGENT'].map(x=><option key={x}>{x}</option>)}</select></label><label className="form-control"><span>Blocker type</span><input value={assignment.blockerType} onChange={e=>setAssignment({...assignment,blockerType:e.target.value})} placeholder="e.g. MANAGER_ACTION_REQUIRED"/></label><label className="form-control"><span>Blocker owner</span><select value={assignment.blockerOwnerUserId} onChange={e=>setAssignment({...assignment,blockerOwnerUserId:e.target.value})}><option value="">Unassigned</option>{list(ctx.eligible_recruiters).map(r=><option key={r.user_id} value={r.user_id}>{r.display_name||r.email}</option>)}</select></label><label className="form-control wide"><span>Blocker reason</span><input value={assignment.blockerReason} onChange={e=>setAssignment({...assignment,blockerReason:e.target.value})} placeholder="Leave blank when unblocked"/></label><label className="form-control wide"><span>Manager instructions</span><textarea rows="3" value={assignment.managerInstructions} onChange={e=>setAssignment({...assignment,managerInstructions:e.target.value})}/></label></div><button className="primary-action" onClick={saveAssignment} disabled={!assignment.recruiterUserId}>Save assignment</button></div>
      </div>
-     <div className="rx-assignment-list">{list(ctx.assignments).map(a=><div key={a.id}><b>{a.recruiter_name||a.recruiter_user_id}</b><span>{a.assignment_status} · target {a.daily_target}</span><small>{a.manager_instructions||a.priority_context||'No manager instructions'}</small></div>)}</div>
+     <div className="rx-assignment-list">{list(ctx.assignments).map(a=><div key={a.id}><b>{a.recruiter_name||a.recruiter_user_id}</b><span>{a.assignment_status} · daily {a.daily_target} · total {a.total_target||0} · {a.priority||'NORMAL'}</span><small>{a.blocker_reason?'Blocked: '+a.blocker_reason:(a.manager_instructions||'No manager instructions')}</small></div>)}</div>
    </section>:null}
 
    {intakeOpen?<div className="modal-backdrop"><section className="ats-modal rx-intake-modal"><div className="drawer-head"><div><span className="page-kicker">Fast sourcing intake</span><h2>Add sourced candidate</h2><p>Search internal talent first, or create the minimum candidate record. Candidate intelligence is not run in Step 3.</p></div><button onClick={()=>setIntakeOpen(false)}>×</button></div>
