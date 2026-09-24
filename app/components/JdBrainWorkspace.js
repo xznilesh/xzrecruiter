@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 const FIELD_STATUS=['confirmed_from_jd','inferred_candidate','missing','ambiguous','conflicting'];
 const LABELS={
   jobTitle:'Job title',roleFamily:'Role family',seniority:'Seniority',openings:'Openings',employmentType:'Employment type',
-  clientContext:'Client context',workModel:'Work model',city:'City',state:'State / region',country:'Country',
+  clientContext:'Client context',workModel:'Work model',city:'City',state:'State / region',country:'Country (ISO code)',
   experience:'Experience range',relevantExperience:'Relevant experience',mandatorySkills:'Mandatory skills',
   preferredSkills:'Preferred skills',technologiesTools:'Technologies / tools',industryDomain:'Industry / domain',
   responsibilities:'Responsibilities',education:'Education',certifications:'Certifications',compensation:'Compensation / rate',
@@ -45,6 +45,7 @@ export default function JdBrainWorkspace({jobId,initialContext,aiConfigured=fals
   const source=ctx?.source||{};const run=ctx?.run||{};const briefMeta=ctx?.brief||{};const job=ctx?.job||{};
   const sourceText=source.extracted_text||source.original_text||'';
   const canApprove=briefMeta?.brief_status==='READY_FOR_APPROVAL';
+  const reviewLocked=briefMeta?.brief_status==='APPROVED'||briefMeta?.brief_status==='SUPERSEDED';
   const unresolvedBlocking=clarifications.filter((x)=>x.blocking&&!x.resolved).length;
   const pendingHard=criteria.filter((x)=>x.kind==='HARD_REQUIREMENT'&&(x.enforcement==='PROPOSED_REVIEW'||x.requiresAmConfirmation)&&!x.amConfirmed).length;
 
@@ -156,7 +157,7 @@ export default function JdBrainWorkspace({jobId,initialContext,aiConfigured=fals
       </div>
     </section>
 
-    {briefMeta?.id?<>
+    {briefMeta?.id?<><fieldset className="jd-review-fieldset" disabled={reviewLocked}>
       <section className="profile-section">
         <div className="closeout-title"><div><h2>2. Structured extraction</h2><small>Every important field keeps confidence, status and JD evidence. AI inference never silently becomes a client requirement.</small></div><span className="status-pill">Brief v{briefMeta.version_number}</span></div>
         <div className="jd-field-grid">{keyFields.map((name)=><FieldEditor key={name} name={name}/>)}</div>
@@ -203,6 +204,7 @@ export default function JdBrainWorkspace({jobId,initialContext,aiConfigured=fals
         <label className="form-control"><span>Reason / approval context</span><textarea rows="3" value={reason} onChange={(e)=>setReason(e.target.value)} placeholder="Optional for edits/approval; required when sending back for revision."/></label>
         <div className="jd-approval-actions"><button onClick={saveDraft} disabled={state==='saving'}>Save draft</button><button className="ghost-action" onClick={requestRevision} disabled={!briefMeta.id||state==='saving'}>Send back for revision</button><button className="primary-action" onClick={approve} disabled={state==='saving'||briefMeta.brief_status==='APPROVED'}>{canApprove?'Approve Hiring Brief':'Resolve review items & approve'}</button></div>
       </section>
+      </fieldset>{reviewLocked?<div className="jd-approved-lock"><b>Approved brief is read-only.</b><span>Ingest a new JD source version to start a new review cycle.</span></div>:null}
     </>:null}
   </div>;
 }
