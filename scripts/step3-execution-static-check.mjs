@@ -3,7 +3,6 @@ import { spawnSync } from 'node:child_process';
 const files=[
   'lib/recruiter-execution.mjs',
   'lib/recruiter.js',
-  'lib/recruiter-access.js',
   'app/api/recruiter/route.js',
   'app/api/recruiter/resume/route.js'
 ];
