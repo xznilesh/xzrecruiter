@@ -292,10 +292,12 @@ begin
         select count(distinct cs.application_id)
         from public.candidate_submissions cs
         join public.applications a on a.id=cs.application_id and a.agency_id=v_agency
+        left join public.pipeline_stages psx on psx.id=a.stage_id and psx.agency_id=v_agency
         where cs.agency_id=v_agency and cs.job_id=j.id
           and cs.workflow_status='CLIENT_SUBMITTED' and cs.status='SUBMITTED'
           and cs.submitted_at>=v_start and cs.submitted_at<v_end
           and a.owner_user_id=ra.recruiter_user_id
+          and private.xzrecruiter_canonical_candidacy_state(coalesce(psx.code,a.stage)) not in ('WITHDRAWN','REJECTED')
       ),0)::integer valid_submissions_today,
       coalesce((
         select count(*)
@@ -583,16 +585,21 @@ begin
     select count(distinct cs.application_id)::integer into v_valid
     from public.candidate_submissions cs
     join public.applications a on a.id=cs.application_id and a.agency_id=v_agency
+    left join public.pipeline_stages psx on psx.id=a.stage_id and psx.agency_id=v_agency
     where cs.agency_id=v_agency and cs.job_id=p_job_id and a.owner_user_id=v_user
       and cs.workflow_status='CLIENT_SUBMITTED' and cs.status='SUBMITTED'
-      and cs.submitted_at>=v_start and cs.submitted_at<v_end;
+      and cs.submitted_at>=v_start and cs.submitted_at<v_end
+      and private.xzrecruiter_canonical_candidacy_state(coalesce(psx.code,a.stage)) not in ('WITHDRAWN','REJECTED');
   else
     v_target:=coalesce((v_job->>'daily_submission_target')::integer,0);
     select count(distinct cs.application_id)::integer into v_valid
     from public.candidate_submissions cs
+    join public.applications a on a.id=cs.application_id and a.agency_id=v_agency
+    left join public.pipeline_stages psx on psx.id=a.stage_id and psx.agency_id=v_agency
     where cs.agency_id=v_agency and cs.job_id=p_job_id
       and cs.workflow_status='CLIENT_SUBMITTED' and cs.status='SUBMITTED'
-      and cs.submitted_at>=v_start and cs.submitted_at<v_end;
+      and cs.submitted_at>=v_start and cs.submitted_at<v_end
+      and private.xzrecruiter_canonical_candidacy_state(coalesce(psx.code,a.stage)) not in ('WITHDRAWN','REJECTED');
   end if;
 
   return jsonb_build_object(
