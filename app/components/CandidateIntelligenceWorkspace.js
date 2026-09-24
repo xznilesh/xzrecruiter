@@ -26,6 +26,15 @@ function EvidenceList({items,empty='No supporting evidence captured.'}){
   return rows.length?<ul className="ci-evidence-list">{rows.map((x,i)=><li key={i}>{typeof x==='string'?x:JSON.stringify(x)}</li>)}</ul>:<p className="ci-muted">{empty}</p>;
 }
 
+function DuplicateEvidence({signals}){
+  const labels={
+    exactEmail:'Exact email',exactPhone:'Exact phone',exactResume:'Exact resume',
+    exactSourceReference:'Exact source URL',nameEmployer:'Same name + employer',nameLocation:'Same name + location'
+  };
+  const rows=Object.entries(signals&&typeof signals==='object'?signals:{}).filter(([,value])=>Boolean(value));
+  return rows.length?<div className="ci-duplicate-signals">{rows.map(([key])=><span key={key}>{labels[key]||pretty(key)}</span>)}</div>:<p className="ci-muted">No duplicate evidence signal captured.</p>;
+}
+
 function FindingList({title,items,empty}){
   const rows=list(items);
   return <section className="ci-card"><div className="ci-card-head"><h2>{title}</h2><span>{rows.length}</span></div>
@@ -119,6 +128,8 @@ export default function CandidateIntelligenceWorkspace({initialContext,jobId,can
       <article><span>Duplicate signal</span><b>{duplicates[0]?.duplicate_status?pretty(duplicates[0].duplicate_status):'No signal'}</b><small>{duplicates.length?'review evidence before any merge':'same-tenant check only'}</small></article>
     </section>
 
+    {isCurrent&&match.hard_rule_status==='UNKNOWN'?<div className="ci-notice"><b>Confirmed hard rule still unresolved.</b><span>The score is not allowed to hide this uncertainty. Recruiter verification is required before relying on the fit band.</span></div>:null}
+
     {isCurrent?<section className="ci-card ci-reasons"><div className="ci-card-head"><div><span className="page-kicker">Fast read</span><h2>Why this candidate may be worth screening</h2></div><span>{match.recommendation?pretty(match.recommendation):'Human review required'}</span></div>
       {topReasons.length?<div className="ci-reason-grid">{topReasons.map((x,i)=><article key={i}><b>{pretty(x.dimension)}</b><p>{x.reason}</p><EvidenceList items={x.evidence}/></article>)}</div>:<p className="ci-muted">No strong evidence-backed reason has been established yet.</p>}
     </section>:null}
@@ -161,15 +172,20 @@ export default function CandidateIntelligenceWorkspace({initialContext,jobId,can
           <div><dt>Total experience</dt><dd>{profile?.professional?.totalExperienceYears?.normalized!==''?String(profile?.professional?.totalExperienceYears?.normalized)+' years':'Unknown'}</dd></div>
           <div><dt>Availability</dt><dd>{pretty(profile?.availability?.status?.normalized||candidate.availability_status||'UNKNOWN')}</dd></div>
           <div><dt>Work model</dt><dd>{pretty(profile?.workContext?.workplacePreference?.normalized||candidate.workplace_preference||'UNKNOWN')}</dd></div>
+          <div><dt>Resume version</dt><dd>{profile?.source?.documentVersion?('v'+profile.source.documentVersion):'No versioned resume'}</dd></div>
+          <div><dt>Parser version</dt><dd>{profile?.source?.parserVersion||'Not recorded'}</dd></div>
+          <div><dt>Match model</dt><dd>{match.model_name||'Deterministic/local evidence'}</dd></div>
+          <div><dt>Match generated</dt><dd>{when(match.generated_at)}</dd></div>
+          {list(profile?.workContext?.workAuthorization).length?<div><dt>Authorization supplied</dt><dd>{list(profile.workContext.workAuthorization).map(x=>x.original||x.normalized).join(' · ')}</dd></div>:null}
         </dl>
         <h3>Normalized skills</h3>
-        <div className="ci-chips">{list(profile.skills).slice(0,30).map((s,i)=><span key={i} title={'Original: '+String(s.original||s.normalized)}>{s.normalized||s.original}</span>)}</div>
+        <div className="ci-chips">{list(profile.skills).slice(0,30).map((s,i)=><span key={i} title={'Original: '+String(s.original||s.normalized)+' · Source: '+String(s.source||'unknown')}>{s.normalized||s.original}<small>{s.source?pretty(s.source):''}</small></span>)}</div>
       </section>
     </div>
 
     <section className="ci-card">
       <div className="ci-card-head"><div><span className="page-kicker">Duplicate intelligence</span><h2>Potential duplicate evidence</h2></div><span>Never auto-merged</span></div>
-      {duplicates.length?<div className="ci-duplicates">{duplicates.map((d)=><article key={d.id}><div><Status value={d.duplicate_status}/><b>{d.full_name}</b><span>{[d.current_title,d.current_company,d.city,d.country_code].filter(Boolean).join(' · ')}</span></div><strong>{d.score}/100 signal</strong><pre>{JSON.stringify(d.signals,null,2)}</pre></article>)}</div>:<p className="ci-muted">No explainable same-tenant duplicate signal is currently stored.</p>}
+      {duplicates.length?<div className="ci-duplicates">{duplicates.map((d)=><article key={d.id}><div><Status value={d.duplicate_status}/><b>{d.full_name}</b><span>{[d.current_title,d.current_company,d.city,d.country_code].filter(Boolean).join(' · ')}</span></div><strong>{d.score}/100 signal</strong><DuplicateEvidence signals={d.signals}/></article>)}</div>:<p className="ci-muted">No explainable same-tenant duplicate signal is currently stored.</p>}
     </section>
 
     <section className="ci-card">
