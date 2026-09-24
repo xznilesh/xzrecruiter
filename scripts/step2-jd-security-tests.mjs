@@ -20,6 +20,10 @@ for(const fn of ['xzrecruiter_prepare_jd_source','xzrecruiter_finalize_jd_source
 assert.ok((sql.match(/agency_id=v_agency/g)||[]).length>=20,'tenant scoping should be pervasive');
 assert.ok(sql.includes("v_business_role not in ('OWNER','ADMIN','ACCOUNT_MANAGER')"));
 assert.ok(sql.includes('blocking_clarifications')&&sql.includes('hard_rules_need_confirmation'));
+assert.ok(sql.includes("criterion_kind='HARD_REQUIREMENT'")&&sql.includes('am_confirmed=false'),'every hard rule requires explicit AM confirmation');
+assert.ok(sql.includes("v_started_at > now()-interval '5 minutes'"),'stale AI run recovery guard missing');
+assert.ok(sql.includes("'criteria',coalesce((")&&sql.includes("'clarifications',coalesce(("),'before/after audit must cover criteria and clarifications');
+assert.ok(sql.includes('country_code=coalesce(v_country,country_code)'),'unvalidated country values must not overwrite canonical country code');
 assert.ok(api.includes('sameOrigin')&&upload.includes('sameOrigin')&&documentRoute.includes('sameOrigin'));
 assert.ok(upload.includes('JD_MAX_FILE_BYTES')&&upload.includes('JD_ALLOWED_MIME_TYPES'));
 assert.ok(server.includes('process.env.OPENAI_API_KEY'));
