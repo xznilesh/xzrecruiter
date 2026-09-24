@@ -15,7 +15,7 @@ export default async function JobProfilePage({params}){
   if(!result?.ok||!result.job)notFound();
   const j=result.job;
   return <AppShell user={user} globalSettings={globalContext.settings} active="jobs">
-    <div className="page-heading"><div><span className="page-kicker">Recruitment · Job 360</span><h1>{j.title}</h1><p>{[j.department,j.city,j.countryCode].filter(Boolean).join(' · ')||'Global requisition'}</p></div><div className="ats-toolbar-actions"><a className="ghost-action" href={`/jobs/${id}/requirement`}>AI JD Brain →</a><a className="ghost-action" href="/jobs">← Job list</a></div></div>
+    <div className="page-heading"><div><span className="page-kicker">Recruitment · Job 360</span><h1>{j.title}</h1><p>{[j.department,j.city,j.countryCode].filter(Boolean).join(' · ')||'Global requisition'}</p></div><div className="ats-toolbar-actions"><a className="ghost-action" href={`/jobs/${id}/requirement`}>AI JD Brain →</a><a className="ghost-action" href={"/recruiter/requirements/"+id}>Recruiter execution →</a><a className="ghost-action" href="/jobs">← Job list</a></div></div>
     <JobProfileEditor job={j} clients={result.clients||[]} pipelines={result.pipelines||[]} countries={globalContext.countries||[]} timezones={globalContext.timezones||[]}/>
   </AppShell>;
 }
