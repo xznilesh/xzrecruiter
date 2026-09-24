@@ -46,11 +46,20 @@ export function mockOutputForFixture(fixture){
         return emptyList(values,values.length?'confirmed_from_jd':'missing',values.flatMap(evidence).slice(0,12));
       })(),
       compensation:{value:{min:null,max:null,currency:'',period:'',rateText:''},confidence:0,evidence:[],status:'missing'},
-      noticeAvailability:emptyString((e.hardConcepts||[]).find((x)=>/day|join|notice/i.test(x))||'','confirmed_from_jd',[]),
-      shiftTimezone:emptyString((e.hardConcepts||[]).find((x)=>/shift|on-call/i.test(x))||'','confirmed_from_jd',[]),
+      noticeAvailability:(()=>{
+        const value=(e.hardConcepts||[]).find((x)=>/day|join|notice/i.test(x))||'';
+        return emptyString(value,value?'confirmed_from_jd':'missing',value?evidence(value):[]);
+      })(),
+      shiftTimezone:(()=>{
+        const value=(e.hardConcepts||[]).find((x)=>/shift|on-call/i.test(x))||'';
+        return emptyString(value,value?'confirmed_from_jd':'missing',value?evidence(value):[]);
+      })(),
       travelRequirements:emptyString('','missing',[]),
       communicationLanguages:emptyList([],'missing',[]),
-      workAuthorization:emptyList((e.hardConcepts||[]).filter((x)=>/authori|visa|sponsor/i.test(x)),'confirmed_from_jd',[]),
+      workAuthorization:(()=>{
+        const values=(e.hardConcepts||[]).filter((x)=>/authori|visa|sponsor/i.test(x));
+        return emptyList(values,values.length?'confirmed_from_jd':'missing',values.flatMap(evidence).slice(0,12));
+      })(),
       deadlineUrgency:emptyString('','missing',[]),
       otherRestrictions:emptyList(e.hardConcepts||[],(e.hardConcepts||[]).length?'confirmed_from_jd':'missing',(e.hardConcepts||[]).flatMap(evidence).slice(0,12)),
     },
