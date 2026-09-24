@@ -15,6 +15,7 @@ const navigation = [
     { key: 'signals', label: 'Signals', icon: '⌁' }, { key: 'people', label: 'People', icon: '◎' }
   ]},
   { label: 'RECRUITMENT', items: [
+    { key: 'recruiter-work', label: 'My Work', href: '/recruiter', icon: '◎', enabled: true },
     { key: 'candidates', label: 'Candidates', href: '/candidates', icon: '◌', enabled: true },
     { key: 'jobs', label: 'Jobs', href: '/jobs', icon: '▤', enabled: true },
     { key: 'recruitment-pipeline', label: 'Recruitment Pipeline', href: '/pipeline', icon: '⋮', enabled: true },
