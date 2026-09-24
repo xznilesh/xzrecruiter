@@ -41,7 +41,7 @@ begin
   order by created_at desc limit 1;
   if v_id is null then
     return jsonb_build_object(
-      'id',null,'version','xz-candidate-score-2026-09-25-v1',
+      'id',null,'version','xz-candidate-score-2026-09-25-v2',
       'weights',jsonb_build_object(
         'mandatorySkills',35,'experienceFit',15,'titleDomain',10,'locationWorkModel',10,
         'workAuthorization',15,'availability',5,'preferredSkills',5,'profileConsistency',5
