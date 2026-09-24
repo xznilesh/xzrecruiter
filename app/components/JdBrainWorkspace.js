@@ -147,7 +147,7 @@ export default function JdBrainWorkspace({jobId,initialContext,aiConfigured=fals
     </section>
 
     {message?<div className={state==='error'?'save-error profile-error':'pipeline-feedback success'} role="status" aria-live="polite">{message}</div>:null}
-    {!aiConfigured?<div className="jd-warning"><b>AI provider not configured.</b><span>JD ingestion/review UI works, but analysis requires server-side OPENAI_API_KEY / model configuration.</span></div>:null}
+    {!aiConfigured?<div className="jd-warning"><b>AI provider not configured.</b><span>JD ingestion/review UI works, but analysis requires server-side AI provider credentials and model configuration.</span></div>:null}
 
     <section className="jd-ingest-panel">
       <div className="closeout-title"><div><h2>1. Source JD</h2><small>Original source is versioned and never overwritten. New text/file creates a new source version.</small></div>{source?.source_type==='UPLOAD'&&source?.id?<a className="ghost-action" href={`/api/requirements/jd/document?sourceId=${source.id}`} target="_blank">Open original document ↗</a>:null}</div>
