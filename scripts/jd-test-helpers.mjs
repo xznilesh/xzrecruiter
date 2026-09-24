@@ -41,7 +41,10 @@ export function mockOutputForFixture(fixture){
       industryDomain:emptyList([],'missing',[]),
       responsibilities:emptyList([],'missing',[]),
       education:emptyList([],'missing',[]),
-      certifications:emptyList(e.hardConcepts?.filter((x)=>/cert|cissp|developer i/i.test(x))||[],'confirmed_from_jd',[]),
+      certifications:(()=>{
+        const values=e.hardConcepts?.filter((x)=>/cert|cissp|developer i/i.test(x))||[];
+        return emptyList(values,values.length?'confirmed_from_jd':'missing',values.flatMap(evidence).slice(0,12));
+      })(),
       compensation:{value:{min:null,max:null,currency:'',period:'',rateText:''},confidence:0,evidence:[],status:'missing'},
       noticeAvailability:emptyString((e.hardConcepts||[]).find((x)=>/day|join|notice/i.test(x))||'','confirmed_from_jd',[]),
       shiftTimezone:emptyString((e.hardConcepts||[]).find((x)=>/shift|on-call/i.test(x))||'','confirmed_from_jd',[]),
