@@ -1120,3 +1120,358 @@ revoke all on function public.xzrecruiter_prepare_execution_resume(text,uuid,uui
 revoke all on function public.xzrecruiter_finalize_execution_resume(text,uuid,uuid,jsonb,jsonb,jsonb,text) from public,anon,authenticated;
 grant execute on function public.xzrecruiter_prepare_execution_resume(text,uuid,uuid,text,text,bigint,text) to anon,authenticated;
 grant execute on function public.xzrecruiter_finalize_execution_resume(text,uuid,uuid,jsonb,jsonb,jsonb,text) to anon,authenticated;
+
+
+-- Step-3 recruiter isolation hardening for legacy broad ATS RPCs.
+-- Managers/admins retain legacy behavior; RECRUITER sessions are denied broad list/mutation
+-- and are scoped for single assigned requirement/candidate reads.
+do $do$
+begin
+  if to_regprocedure('public.xzrecruiter_ats_context(text,text,text,integer,integer)') is not null
+     and to_regprocedure('public.xzrecruiter_ats_context_step3_legacy(text,text,text,integer,integer)') is null then
+    execute 'alter function public.xzrecruiter_ats_context(text,text,text,integer,integer) rename to xzrecruiter_ats_context_step3_legacy';
+  end if;
+  if to_regprocedure('public.xzrecruiter_candidate_search(text,text,jsonb,integer,integer)') is not null
+     and to_regprocedure('public.xzrecruiter_candidate_search_step3_legacy(text,text,jsonb,integer,integer)') is null then
+    execute 'alter function public.xzrecruiter_candidate_search(text,text,jsonb,integer,integer) rename to xzrecruiter_candidate_search_step3_legacy';
+  end if;
+  if to_regprocedure('public.xzrecruiter_job_search(text,text,jsonb,integer,integer)') is not null
+     and to_regprocedure('public.xzrecruiter_job_search_step3_legacy(text,text,jsonb,integer,integer)') is null then
+    execute 'alter function public.xzrecruiter_job_search(text,text,jsonb,integer,integer) rename to xzrecruiter_job_search_step3_legacy';
+  end if;
+  if to_regprocedure('public.xzrecruiter_candidate_profile_context(text,uuid)') is not null
+     and to_regprocedure('public.xzrecruiter_candidate_profile_context_step3_legacy(text,uuid)') is null then
+    execute 'alter function public.xzrecruiter_candidate_profile_context(text,uuid) rename to xzrecruiter_candidate_profile_context_step3_legacy';
+  end if;
+  if to_regprocedure('public.xzrecruiter_job_profile_context(text,uuid)') is not null
+     and to_regprocedure('public.xzrecruiter_job_profile_context_step3_legacy(text,uuid)') is null then
+    execute 'alter function public.xzrecruiter_job_profile_context(text,uuid) rename to xzrecruiter_job_profile_context_step3_legacy';
+  end if;
+  if to_regprocedure('public.xzrecruiter_candidate_document_access(text,uuid)') is not null
+     and to_regprocedure('public.xzrecruiter_candidate_document_access_step3_legacy(text,uuid)') is null then
+    execute 'alter function public.xzrecruiter_candidate_document_access(text,uuid) rename to xzrecruiter_candidate_document_access_step3_legacy';
+  end if;
+  if to_regprocedure('public.xzrecruiter_candidate_closeout_context(text,uuid)') is not null
+     and to_regprocedure('public.xzrecruiter_candidate_closeout_context_step3_legacy(text,uuid)') is null then
+    execute 'alter function public.xzrecruiter_candidate_closeout_context(text,uuid) rename to xzrecruiter_candidate_closeout_context_step3_legacy';
+  end if;
+  if to_regprocedure('public.xzrecruiter_save_candidate(text,jsonb)') is not null
+     and to_regprocedure('public.xzrecruiter_save_candidate_step3_legacy(text,jsonb)') is null then
+    execute 'alter function public.xzrecruiter_save_candidate(text,jsonb) rename to xzrecruiter_save_candidate_step3_legacy';
+  end if;
+  if to_regprocedure('public.xzrecruiter_update_candidate_profile(text,uuid,jsonb)') is not null
+     and to_regprocedure('public.xzrecruiter_update_candidate_profile_step3_legacy(text,uuid,jsonb)') is null then
+    execute 'alter function public.xzrecruiter_update_candidate_profile(text,uuid,jsonb) rename to xzrecruiter_update_candidate_profile_step3_legacy';
+  end if;
+  if to_regprocedure('public.xzrecruiter_archive_candidate(text,uuid)') is not null
+     and to_regprocedure('public.xzrecruiter_archive_candidate_step3_legacy(text,uuid)') is null then
+    execute 'alter function public.xzrecruiter_archive_candidate(text,uuid) rename to xzrecruiter_archive_candidate_step3_legacy';
+  end if;
+  if to_regprocedure('public.xzrecruiter_save_job(text,jsonb)') is not null
+     and to_regprocedure('public.xzrecruiter_save_job_step3_legacy(text,jsonb)') is null then
+    execute 'alter function public.xzrecruiter_save_job(text,jsonb) rename to xzrecruiter_save_job_step3_legacy';
+  end if;
+  if to_regprocedure('public.xzrecruiter_update_job_profile(text,uuid,jsonb)') is not null
+     and to_regprocedure('public.xzrecruiter_update_job_profile_step3_legacy(text,uuid,jsonb)') is null then
+    execute 'alter function public.xzrecruiter_update_job_profile(text,uuid,jsonb) rename to xzrecruiter_update_job_profile_step3_legacy';
+  end if;
+  if to_regprocedure('public.xzrecruiter_prepare_candidate_document(text,uuid,text,text,bigint,text)') is not null
+     and to_regprocedure('public.xzrecruiter_prepare_candidate_document_step3_legacy(text,uuid,text,text,bigint,text)') is null then
+    execute 'alter function public.xzrecruiter_prepare_candidate_document(text,uuid,text,text,bigint,text) rename to xzrecruiter_prepare_candidate_document_step3_legacy';
+  end if;
+  if to_regprocedure('public.xzrecruiter_finalize_candidate_parse(text,uuid,jsonb,jsonb,jsonb,text)') is not null
+     and to_regprocedure('public.xzrecruiter_finalize_candidate_parse_step3_legacy(text,uuid,jsonb,jsonb,jsonb,text)') is null then
+    execute 'alter function public.xzrecruiter_finalize_candidate_parse(text,uuid,jsonb,jsonb,jsonb,text) rename to xzrecruiter_finalize_candidate_parse_step3_legacy';
+  end if;
+  if to_regprocedure('public.xzrecruiter_apply_candidate_parse(text,uuid,jsonb)') is not null
+     and to_regprocedure('public.xzrecruiter_apply_candidate_parse_step3_legacy(text,uuid,jsonb)') is null then
+    execute 'alter function public.xzrecruiter_apply_candidate_parse(text,uuid,jsonb) rename to xzrecruiter_apply_candidate_parse_step3_legacy';
+  end if;
+  if to_regprocedure('public.xzrecruiter_issue_candidate_portal_access(text,uuid)') is not null
+     and to_regprocedure('public.xzrecruiter_issue_candidate_portal_access_step3_legacy(text,uuid)') is null then
+    execute 'alter function public.xzrecruiter_issue_candidate_portal_access(text,uuid) rename to xzrecruiter_issue_candidate_portal_access_step3_legacy';
+  end if;
+end
+$do$;
+
+create or replace function private.xzrecruiter_step3_legacy_recruiter_guard(
+  p_token text
+) returns jsonb
+language plpgsql
+stable
+security definer
+set search_path='public','private','pg_temp'
+as $fn$
+declare v_agency uuid;v_user uuid;v_membership_role text;v_business_role text;
+begin
+  select agency_id,user_id,role into v_agency,v_user,v_membership_role
+  from private.xzrecruiter_session_context(p_token);
+  if v_agency is null then return jsonb_build_object('ok',false,'error','unauthorized'); end if;
+  v_business_role:=private.xzrecruiter_business_role(v_agency,v_user,v_membership_role);
+  return jsonb_build_object('ok',true,'agency_id',v_agency,'user_id',v_user,'business_role',v_business_role);
+end;
+$fn$;
+revoke all on function private.xzrecruiter_step3_legacy_recruiter_guard(text) from public,anon,authenticated;
+
+create or replace function public.xzrecruiter_ats_context(
+  p_token text,p_module text,p_query text default '',p_limit integer default 50,p_offset integer default 0
+) returns jsonb
+language plpgsql stable security definer
+set search_path='public','private','extensions','pg_temp'
+as $fn$
+declare v_guard jsonb;
+begin
+  v_guard:=private.xzrecruiter_step3_legacy_recruiter_guard(p_token);
+  if coalesce(v_guard->>'ok','false')<>'true' then return v_guard; end if;
+  if v_guard->>'business_role'='RECRUITER' then return jsonb_build_object('ok',false,'error','execution_workspace_required'); end if;
+  return public.xzrecruiter_ats_context_step3_legacy(p_token,p_module,p_query,p_limit,p_offset);
+end;
+$fn$;
+
+create or replace function public.xzrecruiter_candidate_search(
+  p_token text,p_query text default '',p_filters jsonb default '{}'::jsonb,p_limit integer default 50,p_offset integer default 0
+) returns jsonb
+language plpgsql stable security definer
+set search_path='public','private','extensions','pg_temp'
+as $fn$
+declare v_guard jsonb;
+begin
+  v_guard:=private.xzrecruiter_step3_legacy_recruiter_guard(p_token);
+  if coalesce(v_guard->>'ok','false')<>'true' then return v_guard; end if;
+  if v_guard->>'business_role'='RECRUITER' then return jsonb_build_object('ok',false,'error','execution_workspace_required'); end if;
+  return public.xzrecruiter_candidate_search_step3_legacy(p_token,p_query,p_filters,p_limit,p_offset);
+end;
+$fn$;
+
+create or replace function public.xzrecruiter_job_search(
+  p_token text,p_query text default '',p_filters jsonb default '{}'::jsonb,p_limit integer default 50,p_offset integer default 0
+) returns jsonb
+language plpgsql stable security definer
+set search_path='public','private','extensions','pg_temp'
+as $fn$
+declare v_guard jsonb;
+begin
+  v_guard:=private.xzrecruiter_step3_legacy_recruiter_guard(p_token);
+  if coalesce(v_guard->>'ok','false')<>'true' then return v_guard; end if;
+  if v_guard->>'business_role'='RECRUITER' then return jsonb_build_object('ok',false,'error','execution_workspace_required'); end if;
+  return public.xzrecruiter_job_search_step3_legacy(p_token,p_query,p_filters,p_limit,p_offset);
+end;
+$fn$;
+
+create or replace function public.xzrecruiter_job_profile_context(
+  p_token text,p_job_id uuid
+) returns jsonb
+language plpgsql stable security definer
+set search_path='public','private','extensions','pg_temp'
+as $fn$
+declare v_guard jsonb;v_agency uuid;v_user uuid;v_role text;
+begin
+  v_guard:=private.xzrecruiter_step3_legacy_recruiter_guard(p_token);
+  if coalesce(v_guard->>'ok','false')<>'true' then return v_guard; end if;
+  v_agency:=(v_guard->>'agency_id')::uuid;v_user:=(v_guard->>'user_id')::uuid;v_role:=v_guard->>'business_role';
+  if v_role='RECRUITER' and not private.xzrecruiter_recruiter_job_access(v_agency,v_user,v_role,p_job_id) then
+    return jsonb_build_object('ok',false,'error','requirement_access_forbidden');
+  end if;
+  return public.xzrecruiter_job_profile_context_step3_legacy(p_token,p_job_id);
+end;
+$fn$;
+
+create or replace function public.xzrecruiter_candidate_profile_context(
+  p_token text,p_candidate_id uuid
+) returns jsonb
+language plpgsql stable security definer
+set search_path='public','private','extensions','pg_temp'
+as $fn$
+declare v_guard jsonb;v_agency uuid;v_user uuid;v_role text;
+begin
+  v_guard:=private.xzrecruiter_step3_legacy_recruiter_guard(p_token);
+  if coalesce(v_guard->>'ok','false')<>'true' then return v_guard; end if;
+  v_agency:=(v_guard->>'agency_id')::uuid;v_user:=(v_guard->>'user_id')::uuid;v_role:=v_guard->>'business_role';
+  if v_role='RECRUITER' and not exists(
+    select 1 from public.candidates c
+    where c.id=p_candidate_id and c.agency_id=v_agency and c.archived_at is null
+      and (
+        c.owner_user_id=v_user
+        or exists(
+          select 1 from public.applications a
+          join public.requirement_recruiter_assignments ra on ra.job_id=a.job_id and ra.agency_id=v_agency
+          where a.agency_id=v_agency and a.candidate_id=c.id and a.archived_at is null
+            and ra.recruiter_user_id=v_user and ra.assignment_status='ACTIVE'
+        )
+      )
+  ) then return jsonb_build_object('ok',false,'error','candidate_access_forbidden'); end if;
+  return public.xzrecruiter_candidate_profile_context_step3_legacy(p_token,p_candidate_id);
+end;
+$fn$;
+
+create or replace function public.xzrecruiter_candidate_document_access(
+  p_token text,p_document_id uuid
+) returns jsonb
+language plpgsql stable security definer
+set search_path='public','private','extensions','pg_temp'
+as $fn$
+declare v_guard jsonb;v_agency uuid;v_user uuid;v_role text;v_candidate uuid;
+begin
+  v_guard:=private.xzrecruiter_step3_legacy_recruiter_guard(p_token);
+  if coalesce(v_guard->>'ok','false')<>'true' then return v_guard; end if;
+  v_agency:=(v_guard->>'agency_id')::uuid;v_user:=(v_guard->>'user_id')::uuid;v_role:=v_guard->>'business_role';
+  if v_role='RECRUITER' then
+    select candidate_id into v_candidate from public.candidate_documents where id=p_document_id and agency_id=v_agency and archived_at is null;
+    if v_candidate is null or not exists(
+      select 1 from public.candidates c
+      where c.id=v_candidate and c.agency_id=v_agency and (
+        c.owner_user_id=v_user or exists(
+          select 1 from public.applications a
+          join public.requirement_recruiter_assignments ra on ra.job_id=a.job_id and ra.agency_id=v_agency
+          where a.agency_id=v_agency and a.candidate_id=c.id and a.archived_at is null
+            and ra.recruiter_user_id=v_user and ra.assignment_status='ACTIVE'
+        )
+      )
+    ) then return jsonb_build_object('ok',false,'error','candidate_document_access_forbidden'); end if;
+  end if;
+  return public.xzrecruiter_candidate_document_access_step3_legacy(p_token,p_document_id);
+end;
+$fn$;
+
+create or replace function public.xzrecruiter_candidate_closeout_context(
+  p_token text,p_candidate_id uuid
+) returns jsonb
+language plpgsql stable security definer
+set search_path='public','private','extensions','pg_temp'
+as $fn$
+declare v_profile jsonb;
+begin
+  v_profile:=public.xzrecruiter_candidate_profile_context(p_token,p_candidate_id);
+  if coalesce(v_profile->>'ok','false')<>'true' then return v_profile; end if;
+  return public.xzrecruiter_candidate_closeout_context_step3_legacy(p_token,p_candidate_id);
+end;
+$fn$;
+
+create or replace function public.xzrecruiter_save_candidate(p_token text,p_candidate jsonb)
+returns jsonb language plpgsql security definer set search_path='public','private','extensions','pg_temp' as $fn$
+declare v_guard jsonb;
+begin
+  v_guard:=private.xzrecruiter_step3_legacy_recruiter_guard(p_token);
+  if coalesce(v_guard->>'ok','false')<>'true' then return v_guard; end if;
+  if v_guard->>'business_role'='RECRUITER' then return jsonb_build_object('ok',false,'error','execution_workspace_required'); end if;
+  return public.xzrecruiter_save_candidate_step3_legacy(p_token,p_candidate);
+end;$fn$;
+
+create or replace function public.xzrecruiter_update_candidate_profile(p_token text,p_candidate_id uuid,p_profile jsonb)
+returns jsonb language plpgsql security definer set search_path='public','private','extensions','pg_temp' as $fn$
+declare v_guard jsonb;
+begin
+  v_guard:=private.xzrecruiter_step3_legacy_recruiter_guard(p_token);
+  if coalesce(v_guard->>'ok','false')<>'true' then return v_guard; end if;
+  if v_guard->>'business_role'='RECRUITER' then return jsonb_build_object('ok',false,'error','execution_workspace_required'); end if;
+  return public.xzrecruiter_update_candidate_profile_step3_legacy(p_token,p_candidate_id,p_profile);
+end;$fn$;
+
+create or replace function public.xzrecruiter_archive_candidate(p_token text,p_candidate_id uuid)
+returns jsonb language plpgsql security definer set search_path='public','private','extensions','pg_temp' as $fn$
+declare v_guard jsonb;
+begin
+  v_guard:=private.xzrecruiter_step3_legacy_recruiter_guard(p_token);
+  if coalesce(v_guard->>'ok','false')<>'true' then return v_guard; end if;
+  if v_guard->>'business_role'='RECRUITER' then return jsonb_build_object('ok',false,'error','execution_workspace_required'); end if;
+  return public.xzrecruiter_archive_candidate_step3_legacy(p_token,p_candidate_id);
+end;$fn$;
+
+create or replace function public.xzrecruiter_save_job(p_token text,p_job jsonb)
+returns jsonb language plpgsql security definer set search_path='public','private','extensions','pg_temp' as $fn$
+declare v_guard jsonb;
+begin
+  v_guard:=private.xzrecruiter_step3_legacy_recruiter_guard(p_token);
+  if coalesce(v_guard->>'ok','false')<>'true' then return v_guard; end if;
+  if v_guard->>'business_role'='RECRUITER' then return jsonb_build_object('ok',false,'error','protected_requirement'); end if;
+  return public.xzrecruiter_save_job_step3_legacy(p_token,p_job);
+end;$fn$;
+
+create or replace function public.xzrecruiter_update_job_profile(p_token text,p_job_id uuid,p_job jsonb)
+returns jsonb language plpgsql security definer set search_path='public','private','extensions','pg_temp' as $fn$
+declare v_guard jsonb;
+begin
+  v_guard:=private.xzrecruiter_step3_legacy_recruiter_guard(p_token);
+  if coalesce(v_guard->>'ok','false')<>'true' then return v_guard; end if;
+  if v_guard->>'business_role'='RECRUITER' then return jsonb_build_object('ok',false,'error','protected_requirement'); end if;
+  return public.xzrecruiter_update_job_profile_step3_legacy(p_token,p_job_id,p_job);
+end;$fn$;
+
+create or replace function public.xzrecruiter_prepare_candidate_document(
+  p_token text,p_candidate_id uuid,p_filename text,p_mime_type text,p_size_bytes bigint,p_checksum text
+) returns jsonb language plpgsql security definer set search_path='public','private','extensions','pg_temp' as $fn$
+declare v_guard jsonb;
+begin
+  v_guard:=private.xzrecruiter_step3_legacy_recruiter_guard(p_token);
+  if coalesce(v_guard->>'ok','false')<>'true' then return v_guard; end if;
+  if v_guard->>'business_role'='RECRUITER' then return jsonb_build_object('ok',false,'error','execution_workspace_required'); end if;
+  return public.xzrecruiter_prepare_candidate_document_step3_legacy(p_token,p_candidate_id,p_filename,p_mime_type,p_size_bytes,p_checksum);
+end;$fn$;
+
+create or replace function public.xzrecruiter_finalize_candidate_parse(
+  p_token text,p_parse_run_id uuid,p_extracted_data jsonb,p_field_confidence jsonb,p_field_evidence jsonb,p_error text default null
+) returns jsonb language plpgsql security definer set search_path='public','private','extensions','pg_temp' as $fn$
+declare v_guard jsonb;
+begin
+  v_guard:=private.xzrecruiter_step3_legacy_recruiter_guard(p_token);
+  if coalesce(v_guard->>'ok','false')<>'true' then return v_guard; end if;
+  if v_guard->>'business_role'='RECRUITER' then return jsonb_build_object('ok',false,'error','execution_workspace_required'); end if;
+  return public.xzrecruiter_finalize_candidate_parse_step3_legacy(p_token,p_parse_run_id,p_extracted_data,p_field_confidence,p_field_evidence,p_error);
+end;$fn$;
+
+create or replace function public.xzrecruiter_apply_candidate_parse(
+  p_token text,p_parse_run_id uuid,p_fields jsonb
+) returns jsonb language plpgsql security definer set search_path='public','private','extensions','pg_temp' as $fn$
+declare v_guard jsonb;
+begin
+  v_guard:=private.xzrecruiter_step3_legacy_recruiter_guard(p_token);
+  if coalesce(v_guard->>'ok','false')<>'true' then return v_guard; end if;
+  if v_guard->>'business_role'='RECRUITER' then return jsonb_build_object('ok',false,'error','execution_workspace_required'); end if;
+  return public.xzrecruiter_apply_candidate_parse_step3_legacy(p_token,p_parse_run_id,p_fields);
+end;$fn$;
+
+create or replace function public.xzrecruiter_issue_candidate_portal_access(
+  p_token text,p_candidate_id uuid
+) returns jsonb language plpgsql security definer set search_path='public','private','extensions','pg_temp' as $fn$
+declare v_guard jsonb;
+begin
+  v_guard:=private.xzrecruiter_step3_legacy_recruiter_guard(p_token);
+  if coalesce(v_guard->>'ok','false')<>'true' then return v_guard; end if;
+  if v_guard->>'business_role'='RECRUITER' then return jsonb_build_object('ok',false,'error','execution_workspace_required'); end if;
+  return public.xzrecruiter_issue_candidate_portal_access_step3_legacy(p_token,p_candidate_id);
+end;$fn$;
+
+-- Remove direct access to renamed implementations.
+revoke all on function public.xzrecruiter_ats_context_step3_legacy(text,text,text,integer,integer) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_candidate_search_step3_legacy(text,text,jsonb,integer,integer) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_job_search_step3_legacy(text,text,jsonb,integer,integer) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_candidate_profile_context_step3_legacy(text,uuid) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_job_profile_context_step3_legacy(text,uuid) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_candidate_document_access_step3_legacy(text,uuid) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_candidate_closeout_context_step3_legacy(text,uuid) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_save_candidate_step3_legacy(text,jsonb) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_update_candidate_profile_step3_legacy(text,uuid,jsonb) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_archive_candidate_step3_legacy(text,uuid) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_save_job_step3_legacy(text,jsonb) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_update_job_profile_step3_legacy(text,uuid,jsonb) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_prepare_candidate_document_step3_legacy(text,uuid,text,text,bigint,text) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_finalize_candidate_parse_step3_legacy(text,uuid,jsonb,jsonb,jsonb,text) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_apply_candidate_parse_step3_legacy(text,uuid,jsonb) from public,anon,authenticated;
+revoke all on function public.xzrecruiter_issue_candidate_portal_access_step3_legacy(text,uuid) from public,anon,authenticated;
+
+grant execute on function public.xzrecruiter_ats_context(text,text,text,integer,integer) to anon,authenticated;
+grant execute on function public.xzrecruiter_candidate_search(text,text,jsonb,integer,integer) to anon,authenticated;
+grant execute on function public.xzrecruiter_job_search(text,text,jsonb,integer,integer) to anon,authenticated;
+grant execute on function public.xzrecruiter_candidate_profile_context(text,uuid) to anon,authenticated;
+grant execute on function public.xzrecruiter_job_profile_context(text,uuid) to anon,authenticated;
+grant execute on function public.xzrecruiter_candidate_document_access(text,uuid) to anon,authenticated;
+grant execute on function public.xzrecruiter_candidate_closeout_context(text,uuid) to anon,authenticated;
+grant execute on function public.xzrecruiter_save_candidate(text,jsonb) to anon,authenticated;
+grant execute on function public.xzrecruiter_update_candidate_profile(text,uuid,jsonb) to anon,authenticated;
+grant execute on function public.xzrecruiter_archive_candidate(text,uuid) to anon,authenticated;
+grant execute on function public.xzrecruiter_save_job(text,jsonb) to anon,authenticated;
+grant execute on function public.xzrecruiter_update_job_profile(text,uuid,jsonb) to anon,authenticated;
+grant execute on function public.xzrecruiter_prepare_candidate_document(text,uuid,text,text,bigint,text) to anon,authenticated;
+grant execute on function public.xzrecruiter_finalize_candidate_parse(text,uuid,jsonb,jsonb,jsonb,text) to anon,authenticated;
+grant execute on function public.xzrecruiter_apply_candidate_parse(text,uuid,jsonb) to anon,authenticated;
+grant execute on function public.xzrecruiter_issue_candidate_portal_access(text,uuid) to anon,authenticated;
