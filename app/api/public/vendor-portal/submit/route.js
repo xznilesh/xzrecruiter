@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { rpc } from '@/lib/supabase-api';
 import { storageConfigured,uploadPrivateObject } from '@/lib/server-storage';
+import { validatePrivateUpload } from '@/lib/file-security';
 
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
@@ -13,7 +14,15 @@ export async function POST(req){
  let form;try{form=await req.formData();}catch{return NextResponse.json({error:'Invalid request.'},{status:400});}
  const token=String(form.get('token')||'');let payload={};try{payload=JSON.parse(String(form.get('payload')||'{}'));}catch{return NextResponse.json({error:'Invalid candidate payload.'},{status:400});}
  const file=form.get('file');if(!token)return NextResponse.json({error:'Missing portal token.'},{status:400});
- if(file&&typeof file==='object'&&Number(file.size||0)>0){if(file.size>MAX_BYTES)return NextResponse.json({error:'invalid_file_size'},{status:400});if(!ALLOWED.has(file.type))return NextResponse.json({error:'unsupported_file_type'},{status:400});if(!storageConfigured())return NextResponse.json({error:'resume_storage_not_configured'},{status:503});}
+ let fileBytes=null;
+ if(file&&typeof file==='object'&&Number(file.size||0)>0){
+   if(file.size>MAX_BYTES)return NextResponse.json({error:'invalid_file_size'},{status:413});
+   if(!ALLOWED.has(file.type))return NextResponse.json({error:'unsupported_file_type'},{status:415});
+   if(!storageConfigured())return NextResponse.json({error:'resume_storage_not_configured'},{status:503});
+   fileBytes=Buffer.from(await file.arrayBuffer());
+   try{validatePrivateUpload({bytes:fileBytes,mimeType:file.type,filename:String(file.name||'resume'),sizeBytes:file.size})}
+   catch(error){return NextResponse.json({error:error?.message||'invalid_file'},{status:error?.message==='invalid_file_size'?413:415})}
+ }
  try{
    const result=await rpc('xzrecruiter_vendor_portal_submit',{p_portal_token:token,p_submission:payload||{}});
    if(!result?.ok){const status=result?.error==='invalid_or_expired'?401:result?.error==='job_not_shared'?404:400;return NextResponse.json(result,{status});}
@@ -22,7 +31,7 @@ export async function POST(req){
      const prepared=await rpc('xzrecruiter_vendor_portal_prepare_resume',{p_portal_token:token,p_submission_id:result.id,p_filename:String(file.name||'resume'),p_mime_type:file.type,p_size_bytes:file.size});
      if(!prepared?.ok)return NextResponse.json({...result,resumeUploaded:false,resumeError:prepared?.error||'resume_prepare_failed'},{status:201});
      try{
-       const bytes=Buffer.from(await file.arrayBuffer());await uploadPrivateObject(prepared.storage_path,bytes,file.type);
+       await uploadPrivateObject(prepared.storage_path,fileBytes,file.type);
        const finalized=await rpc('xzrecruiter_vendor_portal_finalize_resume',{p_portal_token:token,p_submission_id:result.id,p_storage_path:prepared.storage_path,p_filename:prepared.filename,p_mime_type:file.type,p_size_bytes:file.size});
        resumeUploaded=Boolean(finalized?.ok);
      }catch(error){console.error('vendor_resume_upload_failed',error?.message||'');}
