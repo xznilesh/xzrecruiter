@@ -1,0 +1,32 @@
+name: Step 6 bundle materializer
+
+on:
+  push:
+    branches: [step6-ai-submission-pack-am-quality-gate]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'step6: install materializer'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: step6-ai-submission-pack-am-quality-gate
+      - name: Decode Step 6 implementation
+        run: |
+          test -s step6-build.bundle.b64
+          base64 -d step6-build.bundle.b64 > /tmp/step6.tar.gz
+          tar -tzf /tmp/step6.tar.gz
+          tar -xzf /tmp/step6.tar.gz
+          rm step6-build.bundle.b64
+      - name: Commit extracted implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "step6: materialize implementation [step6-extracted]"
+          git push origin HEAD:step6-ai-submission-pack-am-quality-gate
