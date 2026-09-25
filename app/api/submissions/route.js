@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getSubmissionContext,getSubmissionQueue,submissionAction } from '@/lib/submissions';
 import { AmDecision,ReturnReason,validateAmDecision } from '@/lib/submission-pack.mjs';
+import { consumeRateLimit,rateLimitIdentityForRequest } from '@/lib/rate-limit';
+import { mutationRequestIsTrusted,declaredBodyWithin } from '@/lib/request-security';
 
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
@@ -42,9 +44,17 @@ export async function GET(req){
 }
 
 export async function POST(req){
-  if(!sameOrigin(req))return fail('invalid_origin');
+  if(!sameOrigin(req)||!mutationRequestIsTrusted(req))return fail('invalid_origin');
+  if(!declaredBodyWithin(req,256*1024))return NextResponse.json({ok:false,error:'request_too_large'},{status:413});
   let body;try{body=await req.json()}catch{return fail('invalid_json')}
   const action=String(body?.action||'');
+  const expensive=action==='generate'||action==='clientSubmit'||action==='amDecision';
+  if(expensive){
+    const subject=String(body?.submissionId||body?.applicationId||action);
+    const gate=await consumeRateLimit({scope:'submission:'+action.toLowerCase(),identity:rateLimitIdentityForRequest(req,subject),limit:60,windowSeconds:600}).catch(()=>null);
+    if(!gate?.ok)return NextResponse.json({ok:false,error:'submission_service_unavailable'},{status:503});
+    if(!gate.allowed)return NextResponse.json({ok:false,error:'rate_limited'},{status:429});
+  }
 
   if(action==='generate'){
     const applicationId=String(body?.applicationId||'');if(!uuid(applicationId))return fail('invalid_application');
