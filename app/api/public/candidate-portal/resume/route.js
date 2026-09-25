@@ -4,6 +4,7 @@ import { rpc } from '@/lib/supabase-api';
 import { extractResumeText, parseResumeText } from '@/lib/resume-parser';
 import { storageConfigured, uploadPrivateObject } from '@/lib/server-storage';
 import { validatePrivateUpload } from '@/lib/file-security';
+import { consumeRateLimit,rateLimitIdentityForRequest } from '@/lib/rate-limit';
 
 import { mutationRequestIsTrusted } from '@/lib/request-security';
 export const runtime='nodejs';
@@ -30,6 +31,10 @@ export async function POST(req){
  let form;try{form=await req.formData()}catch{return NextResponse.json({error:'invalid_multipart'},{status:400})}
  const token=String(form.get('token')||'');const file=form.get('file');
  if(token.length<24)return NextResponse.json({error:'invalid_token'},{status:400});
+ const gate=await consumeRateLimit({
+   scope:'public:candidate_portal_resume',identity:rateLimitIdentityForRequest(req,token),limit:20,windowSeconds:600
+ }).catch(()=>null);
+ if(!gate?.allowed)return NextResponse.json({error:gate?.ok===false?'rate_limited':'portal_temporarily_unavailable'},{status:gate?.ok===false?429:503});
  if(!(file instanceof File))return NextResponse.json({error:'file_required'},{status:400});
  if(!ALLOWED.has(file.type))return NextResponse.json({error:'unsupported_file_type'},{status:415});
  if(!file.size||file.size>MAX_BYTES)return NextResponse.json({error:'invalid_file_size'},{status:413});
