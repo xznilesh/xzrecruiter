@@ -33,7 +33,7 @@ for(const name of [
 assert.ok(sql.includes("if v_guard->>'business_role'='RECRUITER' then return jsonb_build_object('ok',false,'error','execution_workspace_required')"));
 assert.ok(api.includes('protectedForRecruiter'));
 assert.ok(api.includes('execution_workspace_required'));
-assert.ok(recruiterApi.includes('sameOrigin')&&resumeApi.includes('sameOrigin'));
+assert.ok(recruiterApi.includes('mutationRequestIsTrusted(req)')&&resumeApi.includes('mutationRequestIsTrusted(req)'),'recruiter mutations require Step-7 request integrity');
 assert.ok(resumeApi.includes('MAX_BYTES=8*1024*1024'));
 assert.ok(!workspace.includes('AI candidate score'));
 assert.ok(!workspace.includes('match score'));
