@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import CandidateCloseoutDrawer from '@/app/components/CandidateCloseoutDrawer';
+import { csvCell } from '@/lib/csv';
 
 const blank = { fullName:'', email:'', phone:'', currentTitle:'', currentCompany:'', city:'', region:'', countryCode:'', timezone:'', salaryExpected:'', salaryCurrency:'', noticePeriodDays:'', availabilityStatus:'UNKNOWN', workplacePreference:'', skills:[] };
 
@@ -12,7 +13,6 @@ async function ats(action,payload){
   if(!res.ok) throw new Error(data?.error||'request_failed');
   return data;
 }
-function csvCell(value){const raw=Array.isArray(value)?value.join(' | '):value==null?'':String(value);return `"${raw.replaceAll('"','""')}"`}
 
 export default function CandidateWorkspace({ context, countries = [], timezones = [], savedViews = [] }) {
   const router = useRouter();
