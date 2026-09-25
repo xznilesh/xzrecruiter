@@ -18,9 +18,9 @@ const assertions=[
 ];
 for(const [name,needle] of assertions)if(!text.toLowerCase().includes(needle.toLowerCase()))throw new Error(`Step 5 security invariant missing: ${name} (${needle})`);
 const api=fs.readFileSync('app/api/crm/route.js','utf8');
-if(!api.includes('sameOrigin'))throw new Error('CRM mutation route missing same-origin guard');
+if(!api.includes('mutationRequestIsTrusted(req)'))throw new Error('CRM mutation route missing Step-7 request-integrity guard');
 const lib=fs.readFileSync('lib/crm.js','utf8');
 if(lib.includes('p_agency_id'))throw new Error('CRM wrapper must not send p_agency_id; workspace must come from verified session');
 const portalRoutes=['app/api/public/client-portal/feedback/route.js','app/api/public/vendor-portal/submit/route.js'];
-for(const path of portalRoutes){const source=fs.readFileSync(path,'utf8');if(!source.includes('sameOrigin'))throw new Error(`${path} missing same-origin mutation guard`)}
+for(const path of portalRoutes){const source=fs.readFileSync(path,'utf8');if(!source.includes('mutationRequestIsTrusted(req)'))throw new Error(`${path} missing Step-7 request-integrity guard`)}
 console.log(`Step 5 security checks passed (${assertions.length+2+portalRoutes.length} assertions).`);
