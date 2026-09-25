@@ -1,7 +1,7 @@
 name: XZRecruiter production verification
 on:
   push:
-    branches: [production-rebuild-v1, main, step1-workflow-contract-lock, step2-ai-jd-brain, step3-recruiter-execution-workspace, step4-ai-candidate-intelligence, step2-global-foundation, step3-agency-onboarding, step4-global-enterprise-ats, step4-closeout-stage-guard, step4-closeout-public-apply, step4-final-quality, step5-recruitment-crm]
+    branches: [production-rebuild-v1, main, step1-workflow-contract-lock, step2-ai-jd-brain, step3-recruiter-execution-workspace, step4-ai-candidate-intelligence, step6-ai-submission-pack-am-quality-gate, step2-global-foundation, step3-agency-onboarding, step4-global-enterprise-ats, step4-closeout-stage-guard, step4-closeout-public-apply, step4-final-quality, step5-recruitment-crm]
   pull_request:
     branches: [main, step1-workflow-contract-lock, step2-ai-jd-brain, step3-recruiter-execution-workspace, step2-global-foundation, step3-agency-onboarding, step4-global-enterprise-ats]
 jobs:
@@ -51,6 +51,7 @@ jobs:
       - run: npm run test:step5:security
       - run: npm run test:step5:portals
       - run: npm run test:step5:performance
+      - run: npm run test:step6
       - run: npm run build
         env:
           DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/postgres
