@@ -151,19 +151,19 @@ as $$
     when 'RECRUITMENT_MANAGER' then lower(p_permission)=any(array[
       'requirement:create','requirement:approve','requirement:assign',
       'candidate:view','candidate:edit','candidate:screen',
-      'submission:create','document:sensitive_view','document:review','audit:view'
+      'submission:create','document:resume_view','document:review','audit:view'
     ])
     when 'ACCOUNT_MANAGER' then lower(p_permission)=any(array[
       'requirement:create','requirement:approve','requirement:assign',
       'candidate:view','submission:am_review','submission:client_submit',
-      'commercial:view','commercial:edit','document:sensitive_view','document:review','audit:view'
+      'commercial:view','commercial:edit','document:resume_view','document:sensitive_view','document:review','audit:view'
     ])
     when 'RECRUITER' then lower(p_permission)=any(array[
       'candidate:view','candidate:edit','candidate:screen','submission:create',
-      'document:sensitive_view','document:review'
+      'document:resume_view'
     ])
     when 'COMPLIANCE_REVIEWER' then lower(p_permission)=any(array[
-      'candidate:view','document:sensitive_view','document:review','audit:view'
+      'candidate:view','document:resume_view','document:sensitive_view','document:review','audit:view'
     ])
     when 'CLIENT_USER' then false
     else false
@@ -370,7 +370,7 @@ begin
 end;
 $fn$;
 revoke all on function public.xzrecruiter_consume_rate_limit(text,text,integer,integer) from public,anon,authenticated;
-grant execute on function public.xzrecruiter_consume_rate_limit(text,text,integer,integer) to anon,authenticated;
+grant execute on function public.xzrecruiter_consume_rate_limit(text,text,integer,integer) to service_role;
 
 create or replace function public.xzrecruiter_security_event_context(
   p_token text,p_limit integer default 100
@@ -482,13 +482,22 @@ alter table public.requirement_hiring_briefs
   add column if not exists data_classification text not null default 'INTERNAL';
 alter table public.candidate_submissions
   add column if not exists data_classification text not null default 'CONFIDENTIAL';
+alter table public.application_screening_sessions
+  add column if not exists data_classification text not null default 'HIGHLY_SENSITIVE';
+alter table public.application_screening_answers
+  add column if not exists data_classification text not null default 'HIGHLY_SENSITIVE';
+alter table public.candidate_fact_assertions
+  add column if not exists data_classification text not null default 'HIGHLY_SENSITIVE';
+alter table public.candidate_submission_versions
+  add column if not exists data_classification text not null default 'CONFIDENTIAL';
 
 do $do$
 declare t text;
 begin
   foreach t in array array[
     'candidate_documents','recruitment_attachments','requirement_jd_sources',
-    'requirement_hiring_briefs','candidate_submissions'
+    'requirement_hiring_briefs','candidate_submissions','application_screening_sessions',
+    'application_screening_answers','candidate_fact_assertions','candidate_submission_versions'
   ] loop
     if not exists(
       select 1 from pg_constraint
@@ -603,20 +612,26 @@ language plpgsql
 security definer
 set search_path='public','private','pg_temp'
 as $fn$
-declare v_agency uuid;v_user uuid;v_membership_role text;v_role text;v_candidate uuid;v_result jsonb;
+declare v_agency uuid;v_user uuid;v_membership_role text;v_role text;v_candidate uuid;v_result jsonb;v_document_type text;v_classification text;v_permission text;
 begin
   select agency_id,user_id,role into v_agency,v_user,v_membership_role
   from private.xzrecruiter_session_context(p_token);
   if v_agency is null then return jsonb_build_object('ok',false,'error','unauthorized'); end if;
   v_role:=private.xzrecruiter_normalize_business_role(v_agency,v_user,v_membership_role);
-  if not private.xzrecruiter_has_permission(v_role,'document:sensitive_view') then
-    perform private.xzrecruiter_log_security_event(v_agency,v_user,v_role,'document.access_denied','HIGH','candidate_document',p_document_id,jsonb_build_object('reason','permission'));
-    return jsonb_build_object('ok',false,'error','candidate_document_access_forbidden');
-  end if;
-  select candidate_id into v_candidate
+  select candidate_id,upper(coalesce(document_type,'')),upper(coalesce(data_classification,'HIGHLY_SENSITIVE'))
+  into v_candidate,v_document_type,v_classification
   from public.candidate_documents
   where id=p_document_id and agency_id=v_agency and archived_at is null;
-  if v_candidate is null or not private.xzrecruiter_candidate_object_access(v_agency,v_user,v_role,v_candidate,'candidate:view') then
+  if v_candidate is null then
+    perform private.xzrecruiter_log_security_event(v_agency,v_user,v_role,'document.access_denied','HIGH','candidate_document',p_document_id,jsonb_build_object('reason','not_found_or_cross_tenant'));
+    return jsonb_build_object('ok',false,'error','candidate_document_access_forbidden');
+  end if;
+  v_permission:=case when v_document_type='RESUME' then 'document:resume_view' else 'document:sensitive_view' end;
+  if not private.xzrecruiter_has_permission(v_role,v_permission) then
+    perform private.xzrecruiter_log_security_event(v_agency,v_user,v_role,'document.access_denied','HIGH','candidate_document',p_document_id,jsonb_build_object('reason','permission','required_permission',v_permission,'classification',v_classification));
+    return jsonb_build_object('ok',false,'error','candidate_document_access_forbidden');
+  end if;
+  if not private.xzrecruiter_candidate_object_access(v_agency,v_user,v_role,v_candidate,'candidate:view') then
     perform private.xzrecruiter_log_security_event(v_agency,v_user,v_role,'document.access_denied','HIGH','candidate_document',p_document_id,jsonb_build_object('reason','scope'));
     return jsonb_build_object('ok',false,'error','candidate_document_access_forbidden');
   end if;
@@ -789,14 +804,25 @@ language plpgsql
 security definer
 set search_path='public','private','pg_temp'
 as $fn$
-declare v_agency uuid;v_user uuid;v_membership_role text;v_role text;v_result jsonb;v_rate jsonb;
+declare v_agency uuid;v_user uuid;v_membership_role text;v_role text;v_result jsonb;v_rate jsonb;v_allowed boolean:=false;v_count integer:=coalesce(array_length(p_candidate_ids,1),0);
 begin
   select agency_id,user_id,role into v_agency,v_user,v_membership_role from private.xzrecruiter_session_context(p_token);
   if v_agency is null then return jsonb_build_object('ok',false,'error','unauthorized'); end if;
   v_role:=private.xzrecruiter_normalize_business_role(v_agency,v_user,v_membership_role);
-  if not private.xzrecruiter_has_permission(v_role,'candidate:export') then
-    perform private.xzrecruiter_log_security_event(v_agency,v_user,v_role,'candidate.export_denied','HIGH','candidate',null,jsonb_build_object('requested_count',coalesce(array_length(p_candidate_ids,1),0)));
+  if v_count<1 or v_count>500 then return jsonb_build_object('ok',false,'error','invalid_export_size'); end if;
+  v_allowed:=v_role in ('OWNER','ADMIN')
+    or (v_role='RECRUITMENT_MANAGER' and coalesce((select allow_recruitment_manager_bulk_export from public.organization_data_governance where agency_id=v_agency),false))
+    or (v_role='RECRUITER' and coalesce((select allow_recruiter_bulk_export from public.organization_data_governance where agency_id=v_agency),false));
+  if not v_allowed then
+    perform private.xzrecruiter_log_security_event(v_agency,v_user,v_role,'candidate.export_denied','HIGH','candidate',null,jsonb_build_object('requested_count',v_count));
     return jsonb_build_object('ok',false,'error','bulk_export_forbidden');
+  end if;
+  if exists(
+    select 1 from unnest(p_candidate_ids) id
+    where not private.xzrecruiter_candidate_object_access(v_agency,v_user,v_role,id,'candidate:view')
+  ) then
+    perform private.xzrecruiter_log_security_event(v_agency,v_user,v_role,'candidate.export_scope_denied','HIGH','candidate',null,jsonb_build_object('requested_count',v_count));
+    return jsonb_build_object('ok',false,'error','candidate_access_forbidden');
   end if;
   v_rate:=public.xzrecruiter_consume_rate_limit(
     'candidate:export',
@@ -976,7 +1002,43 @@ end
 $do$;
 
 -- ---------------------------------------------------------------------------
--- 9) Performance/index foundation for tenant-scoped security checks
+-- 9) Critical workflow actions mirrored into immutable security events
+-- ---------------------------------------------------------------------------
+create or replace function private.xzrecruiter_security_event_from_activity()
+returns trigger
+language plpgsql
+security definer
+set search_path='public','private','pg_temp'
+as $fn$
+declare v_role text;
+begin
+  if new.action=any(array[
+    'requirement.hiring_brief_approved','requirement.approved','requirement.hard_rule_updated',
+    'candidate.qualified','screening.override_applied',
+    'submission.internal_submitted','submission.recruiter_resubmitted','submission.am_approved',
+    'submission.am_returned','submission.am_rejected','submission.client_submitted'
+  ]) then
+    select private.xzrecruiter_normalize_business_role(new.agency_id,new.actor_user_id,m.role)
+    into v_role from public.agency_memberships m
+    where m.agency_id=new.agency_id and m.user_id=new.actor_user_id limit 1;
+    perform private.xzrecruiter_log_security_event(
+      new.agency_id,new.actor_user_id,v_role,'workflow.'||new.action,
+      case when new.action in ('submission.client_submitted','screening.override_applied') then 'WARN' else 'INFO' end,
+      new.entity_type,new.entity_id,
+      jsonb_build_object('activity_event_id',new.id)
+    );
+  end if;
+  return new;
+end;
+$fn$;
+revoke all on function private.xzrecruiter_security_event_from_activity() from public,anon,authenticated;
+drop trigger if exists xzr_activity_security_mirror on public.recruitment_activity_events;
+create trigger xzr_activity_security_mirror
+after insert on public.recruitment_activity_events
+for each row execute function private.xzrecruiter_security_event_from_activity();
+
+-- ---------------------------------------------------------------------------
+-- 10) Performance/index foundation for tenant-scoped security checks
 -- ---------------------------------------------------------------------------
 create index if not exists idx_xzr_candidates_tenant_owner_active
   on public.candidates(agency_id,owner_user_id,id) where archived_at is null;
@@ -990,6 +1052,14 @@ create index if not exists idx_xzr_submissions_tenant_state
   on public.candidate_submissions(agency_id,workflow_status,updated_at desc);
 create index if not exists idx_xzr_tasks_tenant_due
   on public.crm_tasks(agency_id,status,due_at) where archived_at is null;
+create index if not exists idx_xzr_screening_tenant_application
+  on public.application_screening_sessions(agency_id,application_id,status,updated_at desc);
+create index if not exists idx_xzr_screening_answers_tenant_session
+  on public.application_screening_answers(agency_id,screening_session_id,question_key);
+create index if not exists idx_xzr_submission_versions_tenant_current
+  on public.candidate_submission_versions(agency_id,submission_id,version_number desc);
+create index if not exists idx_xzr_security_rate_limit_window
+  on public.security_rate_limits(window_started_at,updated_at);
 
 -- Audit/history tables are not directly writable by browser roles.
 revoke update,delete on public.audit_events,public.security_events from anon,authenticated;
