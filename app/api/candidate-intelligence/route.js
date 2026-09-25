@@ -76,7 +76,8 @@ export async function POST(req){
     const rate=await consumeRateLimit({
       scope:'ai:candidate_intelligence',identity:token,limit:30,windowSeconds:600
     }).catch(()=>null);
-    if(!rate?.allowed)return fail(rate?.ok===false?'rate_limited':'candidate_ai_rate_limit_unavailable');
+    if(!rate?.ok)return fail('candidate_ai_rate_limit_unavailable');
+    if(!rate.allowed)return fail('rate_limited');
 
     const candidate=input.candidate||{};
     const parseRun=input.parse_run||{};
