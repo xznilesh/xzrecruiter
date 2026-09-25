@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { rpc } from '@/lib/supabase-api';
 import { storageConfigured,uploadPrivateObject } from '@/lib/server-storage';
 import { validatePrivateUpload } from '@/lib/file-security';
+import { consumeRateLimit,rateLimitIdentityForRequest } from '@/lib/rate-limit';
 
 import { mutationRequestIsTrusted } from '@/lib/request-security';
 export const runtime='nodejs';
@@ -15,6 +16,10 @@ export async function POST(req){
  let form;try{form=await req.formData();}catch{return NextResponse.json({error:'Invalid request.'},{status:400});}
  const token=String(form.get('token')||'');let payload={};try{payload=JSON.parse(String(form.get('payload')||'{}'));}catch{return NextResponse.json({error:'Invalid candidate payload.'},{status:400});}
  const file=form.get('file');if(!token)return NextResponse.json({error:'Missing portal token.'},{status:400});
+ const gate=await consumeRateLimit({
+   scope:'public:vendor_submit',identity:rateLimitIdentityForRequest(req,token),limit:30,windowSeconds:600
+ }).catch(()=>null);
+ if(!gate?.allowed)return NextResponse.json({error:gate?.ok===false?'rate_limited':'Vendor portal is temporarily unavailable.'},{status:gate?.ok===false?429:503});
  let fileBytes=null;
  if(file&&typeof file==='object'&&Number(file.size||0)>0){
    if(file.size>MAX_BYTES)return NextResponse.json({error:'invalid_file_size'},{status:413});
