@@ -246,6 +246,34 @@ begin
     insert into public.application_screening_answers(agency_id,application_id,screening_session_id,question_key,question_text,category,priority,reason,related_requirement,ai_metadata,answer_source)
     values(v_agency,p_application_id,v_id,'work_authorization','Please confirm only the work-authorization status relevant to this approved role.','AUTHORIZATION','CRITICAL','Approved requirement contains an authorization constraint.','work_authorization',jsonb_build_object('engine','GROUNDED_SCREENING_V1'),'UNKNOWN');
   end if;
+
+  -- Materialize approved must-have confirmations. These are trusted requirement data, not resume instructions.
+  for v_q in select value from jsonb_array_elements(coalesce(v_requirement_snapshot->'mustHaves','[]'::jsonb)) loop
+    v_i:=v_i+1;
+    v_text:=btrim(case when jsonb_typeof(v_q)='string' then coalesce(v_q#>>'{}','') else coalesce(v_q->>'label',v_q->>'requirement',v_q->>'text','') end);
+    if v_text<>'' and lower(v_text) !~ '(race|caste|religion|sexual orientation|political view|family status|marital status|pregnan|appearance|ethnicity|disability|date of birth)' then
+      insert into public.application_screening_answers(agency_id,application_id,screening_session_id,question_key,question_text,category,priority,reason,related_requirement,source_evidence,ai_metadata,answer_source)
+      values(v_agency,p_application_id,v_id,'must_have_'||v_i,'Please confirm your hands-on evidence for this must-have: '||left(v_text,300),'MANDATORY_CONFIRMATION','CRITICAL','Approved must-have requires human confirmation.',left(v_text,300),'["APPROVED_REQUIREMENT"]'::jsonb,jsonb_build_object('engine','GROUNDED_SCREENING_V1'),'UNKNOWN') on conflict do nothing;
+    end if;
+  end loop;
+
+  -- Step-4 AI evidence is untrusted text. Use it only as clarification context and drop instruction-like content.
+  for v_q in select value from jsonb_array_elements(coalesce(v_intelligence->'gaps','[]'::jsonb)) loop
+    v_i:=v_i+1;
+    v_text:=btrim(case when jsonb_typeof(v_q)='string' then coalesce(v_q#>>'{}','') else coalesce(v_q->>'label',v_q->>'text',v_q->>'reason','') end);
+    if v_text<>'' and lower(v_text) !~ '(ignore (all|previous|prior)|system prompt|developer message|mark (the )?candidate (as )?qualified|override (the )?rules|bypass (the )?rules|race|caste|religion|sexual orientation|political view|family status|marital status|pregnan|appearance|ethnicity|disability|date of birth)' then
+      insert into public.application_screening_answers(agency_id,application_id,screening_session_id,question_key,question_text,category,priority,reason,related_requirement,source_evidence,ai_metadata,answer_source)
+      values(v_agency,p_application_id,v_id,'gap_'||v_i,'Please clarify this open point from Candidate Intelligence: '||left(v_text,300),'CLARIFICATION','HIGH','Step-4 Candidate Intelligence marked this information incomplete or uncertain.',left(v_text,300),'["STEP4_CANDIDATE_INTELLIGENCE"]'::jsonb,jsonb_build_object('engine','GROUNDED_SCREENING_V1'),'UNKNOWN') on conflict do nothing;
+    end if;
+  end loop;
+  for v_q in select value from jsonb_array_elements(coalesce(v_intelligence->'warnings','[]'::jsonb)) loop
+    v_i:=v_i+1;
+    v_text:=btrim(case when jsonb_typeof(v_q)='string' then coalesce(v_q#>>'{}','') else coalesce(v_q->>'label',v_q->>'text',v_q->>'reason','') end);
+    if v_text<>'' and lower(v_text) !~ '(ignore (all|previous|prior)|system prompt|developer message|mark (the )?candidate (as )?qualified|override (the )?rules|bypass (the )?rules|race|caste|religion|sexual orientation|political view|family status|marital status|pregnan|appearance|ethnicity|disability|date of birth)' then
+      insert into public.application_screening_answers(agency_id,application_id,screening_session_id,question_key,question_text,category,priority,reason,related_requirement,source_evidence,ai_metadata,answer_source)
+      values(v_agency,p_application_id,v_id,'warning_'||v_i,'What evidence can confirm or resolve this warning: '||left(v_text,300),'CLARIFICATION','HIGH','Step-4 warning needs human evidence before safe progression.',left(v_text,300),'["STEP4_WARNING"]'::jsonb,jsonb_build_object('engine','GROUNDED_SCREENING_V1'),'UNKNOWN') on conflict do nothing;
+    end if;
+  end loop;
   for v_q in select value from jsonb_array_elements(coalesce(v_requirement_snapshot->'screeningQuestions','[]'::jsonb)) loop
     v_i:=v_i+1;v_key:=coalesce(nullif(btrim(v_q->>'id'),''),'approved_'||v_i);v_text:=btrim(coalesce(v_q->>'question',''));v_category:=upper(coalesce(nullif(v_q->>'category',''),'ROLE_FIT'));v_priority:=upper(coalesce(nullif(v_q->>'priority',''),'MEDIUM'));v_reason:='Approved requisition screening question.';
     if v_text<>'' and lower(v_text) !~ '(race|caste|religion|sexual orientation|political view|family status|marital status|pregnan|appearance|ethnicity|disability|date of birth)' then
