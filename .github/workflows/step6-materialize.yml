@@ -2,15 +2,14 @@ name: Step 6 bundle materializer
 
 on:
   push:
-    branches: [step6-ai-submission-pack-am-quality-gate]
-  workflow_dispatch:
+    branches:
+      - step6-ai-submission-pack-am-quality-gate
 
 permissions:
   contents: write
 
 jobs:
   materialize:
-    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'step6: install materializer'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,5 +27,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "step6: materialize implementation [step6-extracted]"
+          git commit -m "step6: materialize implementation"
           git push origin HEAD:step6-ai-submission-pack-am-quality-gate
