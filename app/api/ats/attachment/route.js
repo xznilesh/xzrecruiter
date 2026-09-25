@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { atsAction } from '@/lib/ats';
 import { createSignedPrivateUrl, storageConfigured, uploadPrivateObject } from '@/lib/server-storage';
+import { validatePrivateUpload } from '@/lib/file-security';
 
+import { mutationRequestIsTrusted } from '@/lib/request-security';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const ALLOWED=new Set(['application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document','text/plain','image/png','image/jpeg']);
@@ -36,9 +38,11 @@ export async function POST(req){
  if(!(file instanceof File))return NextResponse.json({error:'file_required'},{status:400});
  if(!ALLOWED.has(file.type))return NextResponse.json({error:'unsupported_file_type'},{status:415});
  if(!file.size||file.size>MAX_BYTES)return NextResponse.json({error:'invalid_file_size'},{status:413});
+ const bytes=Buffer.from(await file.arrayBuffer());
+ try{validatePrivateUpload({bytes,mimeType:file.type,filename:file.name||'attachment',sizeBytes:file.size})}
+ catch(error){return NextResponse.json({error:error?.message||'invalid_file'},{status:error?.message==='invalid_file_size'?413:415})}
  const prepared=await atsAction('prepareAttachment',{entityType,entityId,filename:file.name||'attachment',mimeType:file.type,sizeBytes:file.size}).catch(()=>null);
  if(!prepared?.ok)return NextResponse.json(prepared||{error:'attachment_prepare_failed'},{status:prepared?.error==='forbidden'?403:400});
- const bytes=Buffer.from(await file.arrayBuffer());
  try{await uploadPrivateObject(prepared.storage_path,bytes,file.type)}catch(error){console.error('attachment_storage_failed',error?.message||'');await atsAction('archiveAttachment',{attachmentId:prepared.attachment_id}).catch(()=>null);return NextResponse.json({error:'storage_upload_failed'},{status:503})}
  return NextResponse.json({ok:true,attachmentId:prepared.attachment_id});
 }
