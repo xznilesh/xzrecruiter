@@ -45,7 +45,17 @@
     "test:step4:candidate:concurrency": "node scripts/step4-candidate-intelligence-concurrency-tests.mjs",
     "test:step4:candidate:performance": "node scripts/step4-candidate-intelligence-performance-tests.mjs",
     "test:step4:candidate:responsive": "node scripts/step4-candidate-intelligence-responsive-tests.mjs",
-    "test:step4:candidate:live": "node scripts/step4-candidate-intelligence-live-eval.mjs"
+    "test:step4:candidate:live": "node scripts/step4-candidate-intelligence-live-eval.mjs",
+    "check:step6:submission:syntax": "node scripts/step6-submission-static-check.mjs",
+    "test:step6:submission:unit": "node scripts/step6-submission-unit-tests.mjs",
+    "test:step6:submission:integration": "node scripts/step6-submission-integration-tests.mjs",
+    "test:step6:submission:e2e": "node scripts/step6-submission-e2e-tests.mjs",
+    "test:step6:submission:regression": "node scripts/step6-submission-regression-tests.mjs",
+    "test:step6:submission:security": "node scripts/step6-submission-security-tests.mjs",
+    "test:step6:submission:concurrency": "node scripts/step6-submission-concurrency-tests.mjs",
+    "test:step6:submission:performance": "node scripts/step6-submission-performance-tests.mjs",
+    "test:step6:submission:responsive": "node scripts/step6-submission-responsive-tests.mjs",
+    "test:step6": "npm run check:step6:submission:syntax && npm run test:step6:submission:unit && npm run test:step6:submission:integration && npm run test:step6:submission:e2e && npm run test:step6:submission:regression && npm run test:step6:submission:security && npm run test:step6:submission:concurrency && npm run test:step6:submission:performance && npm run test:step6:submission:responsive"
   },
   "dependencies": {
     "mammoth": "1.9.1",
