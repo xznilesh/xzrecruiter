@@ -59,5 +59,8 @@ assert.ok(!route.includes('NEXT_PUBLIC_OPENAI')&&!route.includes('OPENAI_API_KEY
 
 assert.ok(b.includes("limit v_limit")&&b.includes("least(coalesce(p_limit,30),50)"),'talent search must be server bounded');
 assert.ok(b.includes("'semantic_used',false"),'semantic search must not be falsely claimed when pgvector is not used');
+for(const fn of ['xzrecruiter_complete_candidate_intelligence','xzrecruiter_review_candidate_intelligence','xzrecruiter_talent_match_search']){
+  assert.equal((b.match(new RegExp('create or replace function public\\.'+fn,'g'))||[]).length,1,'duplicate canonical RPC definition: '+fn);
+}
 
 console.log('STEP4_CANDIDATE_INTEGRATION_PASS ingestion=true persistence=true versions=true stale_guards=true duplicates=true tenant_scope=true activities=true');
