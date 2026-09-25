@@ -32,6 +32,8 @@ assert.ok(stale.includes('after update')&&stale.includes('xzr_candidate_intellig
 assert.ok(stale.includes('xzr_candidate_intelligence_stale_on_document'));
 assert.ok(stale.includes('xzr_candidate_intelligence_stale_on_requirement'));
 assert.ok(stale.includes('xzr_candidate_intelligence_stale_on_scoring'));
+assert.ok(stale.includes("v_document_type='RESUME'"),'non-resume documents must not trigger candidate intelligence recompute');
+assert.ok(stale.includes("tg_op='INSERT' and new.active=true"),'inactive scoring config insertion must not stale current matches');
 
 assert.ok(step3.includes('checksum')&&step3.includes('candidate_documents'),'resume version/checksum contract required for double-upload protection');
 
