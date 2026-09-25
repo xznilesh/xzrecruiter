@@ -11,7 +11,7 @@ function statusFor(error) {
   if (error === 'forbidden' || error === 'stage_role_forbidden') return 403;
   if (error === 'not_found' || error?.endsWith?.('_not_found')) return 404;
   if (error === 'possible_duplicate' || error === 'application_exists' || error === 'placement_exists' || error === 'already_applied' || error === 'stale_screening_version' || error === 'screening_closed') return 409;
-  if (error === 'stage_requirements_missing' || error === 'rejection_reason_required' || error === 'withdrawal_reason_required' || error === 'candidate_interest_required' || error === 'non_overridable_hard_rule' || error === 'override_reason_required' || error === 'fake_verification_forbidden' || error === 'invalid_screening_outcome') return 422;
+  if (error === 'stage_requirements_missing' || error === 'rejection_reason_required' || error === 'withdrawal_reason_required' || error === 'candidate_interest_required' || error === 'non_overridable_hard_rule' || error === 'override_reason_required' || error === 'fake_verification_forbidden' || error === 'invalid_screening_outcome' || error === 'qualification_requirements_missing' || error === 'candidate_interest_outcome_mismatch') return 422;
   return 400;
 }
 
