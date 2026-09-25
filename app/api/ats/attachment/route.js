@@ -3,7 +3,7 @@ import { atsAction } from '@/lib/ats';
 import { createSignedPrivateUrl, storageConfigured, uploadPrivateObject } from '@/lib/server-storage';
 import { validatePrivateUpload } from '@/lib/file-security';
 
-import { mutationRequestIsTrusted } from '@/lib/request-security';
+import { mutationRequestIsTrusted,declaredBodyWithin } from '@/lib/request-security';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const ALLOWED=new Set(['application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document','text/plain','image/png','image/jpeg']);
@@ -30,7 +30,7 @@ export async function GET(req){
 }
 
 export async function POST(req){
- if(!sameOrigin(req))return NextResponse.json({error:'invalid_origin'},{status:403});
+ if(!sameOrigin(req)||!mutationRequestIsTrusted(req))return NextResponse.json({error:'invalid_origin'},{status:403});
  if(!storageConfigured())return NextResponse.json({error:'storage_not_configured'},{status:503});
  let form;try{form=await req.formData()}catch{return NextResponse.json({error:'invalid_multipart'},{status:400})}
  const entityType=String(form.get('entityType')||'');const entityId=String(form.get('entityId')||'');const file=form.get('file');
@@ -48,7 +48,8 @@ export async function POST(req){
 }
 
 export async function DELETE(req){
- if(!sameOrigin(req))return NextResponse.json({error:'invalid_origin'},{status:403});
+ if(!sameOrigin(req)||!mutationRequestIsTrusted(req))return NextResponse.json({error:'invalid_origin'},{status:403});
+ if(!declaredBodyWithin(req,32768))return NextResponse.json({error:'request_too_large'},{status:413});
  let body;try{body=await req.json()}catch{return NextResponse.json({error:'invalid_request'},{status:400})}
  const attachmentId=String(body?.attachmentId||'');if(!uuid(attachmentId))return NextResponse.json({error:'invalid_attachment'},{status:400});
  const result=await atsAction('archiveAttachment',{attachmentId}).catch(()=>null);if(!result?.ok)return NextResponse.json(result||{error:'archive_failed'},{status:result?.error==='forbidden'?403:400});return NextResponse.json(result);
