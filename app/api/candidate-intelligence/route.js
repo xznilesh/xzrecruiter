@@ -11,7 +11,7 @@ import {
   CANDIDATE_PROMPT_VERSION,CANDIDATE_MATCH_SCHEMA_VERSION,SCORING_CONFIG_VERSION
 } from '@/lib/candidate-intelligence.mjs';
 
-import { mutationRequestIsTrusted } from '@/lib/request-security';
+import { mutationRequestIsTrusted,declaredBodyWithin } from '@/lib/request-security';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 
@@ -61,7 +61,8 @@ export async function GET(req){
 }
 
 export async function POST(req){
-  if(!sameOrigin(req))return fail('invalid_origin');
+  if(!mutationRequestIsTrusted(req))return fail('invalid_request_origin');
+  if(!declaredBodyWithin(req,256*1024))return NextResponse.json({ok:false,error:'request_too_large'},{status:413});
   let body;try{body=await req.json()}catch{return fail('invalid_json')}
   const action=String(body?.action||'');
 
