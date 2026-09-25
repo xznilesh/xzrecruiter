@@ -3,8 +3,10 @@ import { rpc } from '@/lib/supabase-api';
 import { consumeRateLimit,rateLimitIdentityForRequest } from '@/lib/rate-limit';
 import { mutationRequestIsTrusted,declaredBodyWithin } from '@/lib/request-security';
 
+function sameOrigin(req){const origin=req.headers.get('origin');return !origin||origin===req.nextUrl.origin}
+
 export async function POST(req){
- if(!mutationRequestIsTrusted(req))return NextResponse.json({error:'Invalid origin.'},{status:403});
+ if(!sameOrigin(req)||!mutationRequestIsTrusted(req))return NextResponse.json({error:'Invalid origin.'},{status:403});
  if(!declaredBodyWithin(req,64*1024))return NextResponse.json({error:'Request is too large.'},{status:413});
  let body;try{body=await req.json();}catch{return NextResponse.json({error:'Invalid request.'},{status:400});}
  const token=String(body.token||'');const submissionId=String(body.submissionId||'');const decision=String(body.decision||'');
