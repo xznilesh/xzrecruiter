@@ -28,7 +28,7 @@ const step3Files=[
 ].map((p)=>fs.readFileSync(p,'utf8')).join('\n');
 
 if(!auth.includes('__Host-xz_session')||!auth.includes('httpOnly: true')) throw new Error('Secure Step-1 session invariant missing');
-if(!signup.includes('requiresEmailVerification: true')) throw new Error('Mandatory Step-1 verification contract missing');
+if(!/requiresEmailVerification\s*:\s*true/.test(signup)||!signup.includes('requestEmailProof')) throw new Error('Mandatory Step-1 verification contract missing');
 if(logo.includes('>XZ</text>')||!logo.includes('>Recruiter</text>')) throw new Error('XZ Recruiter brand invariant failed');
 if(/\bdrop\s+table\b|\btruncate\b|alter\s+table\s+[^;]+\s+drop\s+column/i.test(`${step2}\n${step2Hardening}\n${step3Files}`)) throw new Error('Destructive schema statement detected');
 if(!step2.includes('workspace_global_settings')||!step2.includes('global_timezones')) throw new Error('Persisted Step-2 globalization missing');
