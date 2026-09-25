@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { mutationRequestIsTrusted,declaredBodyWithin } from '@/lib/request-security';
 import { atsAction } from '@/lib/ats';
 import { getRecruiterHome } from '@/lib/recruiter';
 
@@ -17,7 +18,8 @@ function statusFor(error) {
 }
 
 export async function POST(req) {
-  if (!sameOrigin(req)) return NextResponse.json({ error: 'Invalid origin.' }, { status: 403 });
+  if(!sameOrigin(req)||!mutationRequestIsTrusted(req))return NextResponse.json({ error: 'Invalid origin.' }, { status: 403 });
+  if(!declaredBodyWithin(req,1048576))return NextResponse.json({error:'request_too_large'},{status:413});
   let body;
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: 'Invalid request.' }, { status: 400 }); }
