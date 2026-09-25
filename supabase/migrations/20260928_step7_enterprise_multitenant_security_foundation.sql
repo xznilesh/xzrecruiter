@@ -196,8 +196,9 @@ as $$
              and ra.recruiter_user_id=p_user
              and ra.assignment_status='ACTIVE'
             join public.recruitment_jobs j
-              on j.id=a.job_id and j.agency_id=p_agency and j.archived_at is null
-             and j.recruiter_ready=true and j.requirement_state='OPEN'
+              on j.id=a.job_id and j.agency_id=p_agency
+             and j.archived_at is null and j.recruiter_ready=true
+             and j.requirement_state='OPEN' and j.approved_hiring_brief_id is not null
             where a.agency_id=p_agency
               and a.candidate_id=c.id
               and a.archived_at is null
@@ -225,37 +226,12 @@ as $$
           where ra.agency_id=p_agency and ra.job_id=j.id
             and ra.recruiter_user_id=p_user and ra.assignment_status='ACTIVE'
             and j.recruiter_ready=true and j.requirement_state='OPEN'
+            and j.approved_hiring_brief_id is not null
         )
       )
   );
 $$;
 revoke all on function private.xzrecruiter_job_object_access(uuid,uuid,text,uuid) from public,anon,authenticated;
-
-create or replace function private.xzrecruiter_entity_belongs_to_agency(
-  p_agency uuid,p_entity_type text,p_entity_id uuid
-) returns boolean
-language plpgsql
-stable
-security definer
-set search_path='public','private','pg_temp'
-as $fn$
-declare v_type text:=upper(coalesce(p_entity_type,''));
-begin
-  if p_agency is null or p_entity_id is null then return false; end if;
-  if v_type='CANDIDATE' then return exists(select 1 from public.candidates where id=p_entity_id and agency_id=p_agency and archived_at is null);
-  elsif v_type='JOB' then return exists(select 1 from public.recruitment_jobs where id=p_entity_id and agency_id=p_agency and archived_at is null);
-  elsif v_type='APPLICATION' then return exists(select 1 from public.applications where id=p_entity_id and agency_id=p_agency and archived_at is null);
-  elsif v_type='INTERVIEW' then return exists(select 1 from public.interviews where id=p_entity_id and agency_id=p_agency);
-  elsif v_type='OFFER' then return exists(select 1 from public.offers where id=p_entity_id and agency_id=p_agency);
-  elsif v_type='PLACEMENT' then return exists(select 1 from public.placements where id=p_entity_id and agency_id=p_agency);
-  elsif v_type='CLIENT' then return exists(select 1 from public.recruitment_clients where id=p_entity_id and agency_id=p_agency);
-  elsif v_type='SUBMISSION' then return exists(select 1 from public.candidate_submissions where id=p_entity_id and agency_id=p_agency);
-  elsif v_type='TASK' then return exists(select 1 from public.crm_tasks where id=p_entity_id and agency_id=p_agency and archived_at is null);
-  end if;
-  return false;
-end;
-$fn$;
-revoke all on function private.xzrecruiter_entity_belongs_to_agency(uuid,text,uuid) from public,anon,authenticated;
 
 create or replace function private.xzrecruiter_attachment_object_access(
   p_agency uuid,p_user uuid,p_business_role text,p_entity_type text,p_entity_id uuid
@@ -299,6 +275,19 @@ end;
 $fn$;
 revoke all on function private.xzrecruiter_attachment_object_access(uuid,uuid,text,text,uuid) from public,anon,authenticated;
 
+-- Invitation records are future privilege-bearing inputs: constrain them now.
+alter table public.workspace_invitations
+  drop constraint if exists workspace_invitations_business_role_check;
+alter table public.workspace_invitations
+  add constraint workspace_invitations_business_role_check
+  check (business_role in ('ADMIN','RECRUITMENT_MANAGER','ACCOUNT_MANAGER','RECRUITER','COMPLIANCE_REVIEWER','CLIENT_USER'));
+
+alter table public.workspace_invitations
+  drop constraint if exists workspace_invitations_owner_escalation_check;
+alter table public.workspace_invitations
+  add constraint workspace_invitations_owner_escalation_check
+  check (upper(coalesce(business_role,'')) <> 'OWNER');
+
 -- ---------------------------------------------------------------------------
 -- 3) Security events, retention/export foundation, rate limits
 -- ---------------------------------------------------------------------------
@@ -329,18 +318,6 @@ create table if not exists public.organization_data_governance(
   updated_by_user_id uuid references public.users(id) on delete set null,
   updated_at timestamptz not null default now()
 );
-
-alter table public.workspace_invitations
-  drop constraint if exists workspace_invitations_business_role_step7_check;
-alter table public.workspace_invitations
-  add constraint workspace_invitations_business_role_step7_check
-  check (
-    upper(business_role) in (
-      'ADMIN','RECRUITMENT_MANAGER','RECRUITER','SOURCER',
-      'BUSINESS_DEVELOPMENT','ACCOUNT_MANAGER','HIRING_MANAGER',
-      'INTERVIEWER','VIEWER_ANALYST','COMPLIANCE_REVIEWER'
-    )
-  ) not valid;
 
 create table if not exists public.security_rate_limits(
   scope text not null,
@@ -374,42 +351,6 @@ begin
 end;
 $fn$;
 revoke all on function private.xzrecruiter_log_security_event(uuid,uuid,text,text,text,text,uuid,jsonb) from public,anon,authenticated;
-
-create or replace function private.xzrecruiter_invitation_security_event()
-returns trigger
-language plpgsql
-security definer
-set search_path='public','private','pg_temp'
-as $fn$
-declare v_event text;v_role text;
-begin
-  if tg_op='INSERT' then v_event:='membership.invite_created';
-  elsif old.status is distinct from new.status then v_event:='membership.invite_status_changed';
-  elsif old.business_role is distinct from new.business_role or old.rbac_role is distinct from new.rbac_role then
-    v_event:='membership.invite_role_changed';
-  else return new;
-  end if;
-  select private.xzrecruiter_normalize_business_role(new.agency_id,new.invited_by_user_id,m.role)
-    into v_role
-  from public.agency_memberships m
-  where m.agency_id=new.agency_id and m.user_id=new.invited_by_user_id
-  limit 1;
-  perform private.xzrecruiter_log_security_event(
-    new.agency_id,new.invited_by_user_id,v_role,v_event,'WARN','workspace_invitation',new.id,
-    jsonb_build_object(
-      'status',new.status,'rbac_role',new.rbac_role,'business_role',new.business_role,
-      'email_hash',encode(extensions.digest(lower(coalesce(new.email,'')),'sha256'),'hex')
-    )
-  );
-  return new;
-end;
-$fn$;
-revoke all on function private.xzrecruiter_invitation_security_event() from public,anon,authenticated;
-
-drop trigger if exists xzr_workspace_invitation_security_event on public.workspace_invitations;
-create trigger xzr_workspace_invitation_security_event
-after insert or update of status,rbac_role,business_role on public.workspace_invitations
-for each row execute function private.xzrecruiter_invitation_security_event();
 
 create or replace function public.xzrecruiter_consume_rate_limit(
   p_scope text,p_key_hash text,p_limit integer,p_window_seconds integer
@@ -585,6 +526,48 @@ begin
         'alter table public.%I add constraint %I check(data_classification in (''PUBLIC_LOW'',''INTERNAL'',''CONFIDENTIAL'',''HIGHLY_SENSITIVE''))',
         t,'xzr_'||t||'_classification_check'
       );
+    end if;
+  end loop;
+end
+$do$;
+
+-- Core tenant entity classification foundation.
+do $do$
+declare r record;v_default text;v_constraint text;
+begin
+  for r in
+    select * from (values
+      ('candidates','HIGHLY_SENSITIVE'),
+      ('applications','HIGHLY_SENSITIVE'),
+      ('recruitment_jobs','CONFIDENTIAL'),
+      ('recruitment_clients','CONFIDENTIAL'),
+      ('crm_contacts','CONFIDENTIAL'),
+      ('crm_tasks','INTERNAL'),
+      ('recruitment_activity_events','INTERNAL'),
+      ('interviews','CONFIDENTIAL'),
+      ('offers','CONFIDENTIAL'),
+      ('placements','CONFIDENTIAL'),
+      ('application_screening_summaries','HIGHLY_SENSITIVE'),
+      ('application_screening_overrides','HIGHLY_SENSITIVE'),
+      ('application_match_versions','HIGHLY_SENSITIVE'),
+      ('requirement_ai_runs','CONFIDENTIAL')
+    ) as x(table_name,default_classification)
+  loop
+    if to_regclass('public.'||r.table_name) is not null then
+      execute format(
+        'alter table public.%I add column if not exists data_classification text not null default %L',
+        r.table_name,r.default_classification
+      );
+      v_constraint:='xzr_'||r.table_name||'_core_classification_check';
+      if not exists(
+        select 1 from pg_constraint
+        where conrelid=('public.'||r.table_name)::regclass and conname=v_constraint
+      ) then
+        execute format(
+          'alter table public.%I add constraint %I check(data_classification in (''PUBLIC_LOW'',''INTERNAL'',''CONFIDENTIAL'',''HIGHLY_SENSITIVE''))',
+          r.table_name,v_constraint
+        );
+      end if;
     end if;
   end loop;
 end
