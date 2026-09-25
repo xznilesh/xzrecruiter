@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import { NextResponse } from 'next/server';
+import { sessionToken } from '@/lib/auth';
+import { consumeRateLimit } from '@/lib/rate-limit';
 import { jdAction, getRequirementContext } from '@/lib/jd';
 import { analyzeJdServer, jdAiConfigured } from '@/lib/jd-ai-server';
 import { createJdIdempotencyKey } from '@/lib/jd-ai.mjs';
@@ -17,6 +19,7 @@ function statusFor(error){
   if(error?.endsWith?.('_not_found')||error==='job_not_found')return 404;
   if(error==='jd_ai_not_configured')return 503;
   if(error==='already_processing')return 409;
+  if(error==='rate_limited')return 429;
   if(error==='invalid_workflow_transition'||error==='blocking_clarifications'||error==='hard_rules_need_confirmation'||error==='brief_not_ready_for_approval')return 422;
   if(error==='jd_text_too_large')return 413;
   return 400;
@@ -74,6 +77,12 @@ export async function POST(req){
     if(!sourceResult?.ok)return responseError(sourceResult?.error||'jd_source_unavailable');
     const source=sourceResult.source||{};
     if(source.source_status!=='READY')return responseError('jd_source_not_ready');
+    const token=await sessionToken();
+    if(!token)return responseError('unauthorized',401);
+    const rate=await consumeRateLimit({
+      scope:'ai:jd_analysis',identity:token,limit:20,windowSeconds:600
+    }).catch(()=>null);
+    if(!rate?.allowed)return responseError(rate?.ok===false?'rate_limited':'jd_ai_rate_limit_unavailable',rate?.ok===false?429:503);
     const jdText=sanitizeJdText(source.extracted_text||source.original_text||'');
     if(jdText.length<20)return responseError('jd_text_too_short');
 
