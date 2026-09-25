@@ -330,6 +330,18 @@ create table if not exists public.organization_data_governance(
   updated_at timestamptz not null default now()
 );
 
+alter table public.workspace_invitations
+  drop constraint if exists workspace_invitations_business_role_step7_check;
+alter table public.workspace_invitations
+  add constraint workspace_invitations_business_role_step7_check
+  check (
+    upper(business_role) in (
+      'ADMIN','RECRUITMENT_MANAGER','RECRUITER','SOURCER',
+      'BUSINESS_DEVELOPMENT','ACCOUNT_MANAGER','HIRING_MANAGER',
+      'INTERVIEWER','VIEWER_ANALYST','COMPLIANCE_REVIEWER'
+    )
+  ) not valid;
+
 create table if not exists public.security_rate_limits(
   scope text not null,
   key_hash text not null,
@@ -362,6 +374,42 @@ begin
 end;
 $fn$;
 revoke all on function private.xzrecruiter_log_security_event(uuid,uuid,text,text,text,text,uuid,jsonb) from public,anon,authenticated;
+
+create or replace function private.xzrecruiter_invitation_security_event()
+returns trigger
+language plpgsql
+security definer
+set search_path='public','private','pg_temp'
+as $fn$
+declare v_event text;v_role text;
+begin
+  if tg_op='INSERT' then v_event:='membership.invite_created';
+  elsif old.status is distinct from new.status then v_event:='membership.invite_status_changed';
+  elsif old.business_role is distinct from new.business_role or old.rbac_role is distinct from new.rbac_role then
+    v_event:='membership.invite_role_changed';
+  else return new;
+  end if;
+  select private.xzrecruiter_normalize_business_role(new.agency_id,new.invited_by_user_id,m.role)
+    into v_role
+  from public.agency_memberships m
+  where m.agency_id=new.agency_id and m.user_id=new.invited_by_user_id
+  limit 1;
+  perform private.xzrecruiter_log_security_event(
+    new.agency_id,new.invited_by_user_id,v_role,v_event,'WARN','workspace_invitation',new.id,
+    jsonb_build_object(
+      'status',new.status,'rbac_role',new.rbac_role,'business_role',new.business_role,
+      'email_hash',encode(extensions.digest(lower(coalesce(new.email,'')),'sha256'),'hex')
+    )
+  );
+  return new;
+end;
+$fn$;
+revoke all on function private.xzrecruiter_invitation_security_event() from public,anon,authenticated;
+
+drop trigger if exists xzr_workspace_invitation_security_event on public.workspace_invitations;
+create trigger xzr_workspace_invitation_security_event
+after insert or update of status,rbac_role,business_role on public.workspace_invitations
+for each row execute function private.xzrecruiter_invitation_security_event();
 
 create or replace function public.xzrecruiter_consume_rate_limit(
   p_scope text,p_key_hash text,p_limit integer,p_window_seconds integer
