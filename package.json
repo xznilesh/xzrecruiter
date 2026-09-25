@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "node scripts/verify.mjs",
+    "typecheck": "node scripts/step5-screening-suite.mjs syntax",
     "test:step2": "node scripts/step2-tests.mjs",
     "test:step3": "node scripts/step3-tests.mjs",
     "test:step4": "node scripts/step4-tests.mjs",
@@ -19,7 +20,15 @@
     "test:step5": "node scripts/step5-tests.mjs",
     "test:step5:security": "node scripts/step5-security-tests.mjs",
     "test:step5:portals": "node scripts/step5-portals-tests.mjs",
-    "test:step5:performance": "node scripts/step5-performance-guard.mjs"
+    "test:step5:performance": "node scripts/step5-performance-guard.mjs",
+    "test:step5:screening:unit": "node scripts/step5-screening-suite.mjs unit",
+    "test:step5:screening:integration": "node scripts/step5-screening-suite.mjs integration",
+    "test:step5:screening:e2e": "node scripts/step5-screening-suite.mjs e2e",
+    "test:step5:screening:ai": "node scripts/step5-screening-suite.mjs ai",
+    "test:step5:screening:security": "node scripts/step5-screening-suite.mjs security",
+    "test:step5:screening:concurrency": "node scripts/step5-screening-suite.mjs concurrency",
+    "test:step5:screening:performance": "node scripts/step5-screening-suite.mjs performance",
+    "test:step5:screening": "node scripts/step5-screening-suite.mjs all"
   },
   "dependencies": {
     "mammoth": "1.9.1",
