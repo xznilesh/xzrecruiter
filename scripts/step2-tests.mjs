@@ -96,7 +96,7 @@ assert.ok(hardening.includes('recruitment_jobs_salary_period_check'));
 assert.ok(auth.includes("'__Host-xz_session'"));
 assert.ok(auth.includes('httpOnly: true'));
 assert.ok(auth.includes("sameSite: 'lax'"));
-assert.ok(signup.includes('requiresEmailVerification: true'));
+assert.ok(/requiresEmailVerification\s*:\s*true/.test(signup)&&signup.includes('requestEmailProof'));
 assert.ok(fs.existsSync(path.join(root, 'app/api/auth/password-reset/complete/route.js')));
 assert.ok(fs.existsSync(path.join(root, 'app/api/auth/verify-email/route.js')));
 assert.ok(!logo.includes('>XZ</text>'), 'Duplicate XZ wordmark returned');
