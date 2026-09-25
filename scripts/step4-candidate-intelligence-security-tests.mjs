@@ -28,6 +28,9 @@ assert.ok(b.includes('where c.agency_id=v_agency'),'talent search must tenant-fi
 assert.ok(b.includes("'semantic_used',false"),'must not claim semantic/vector ranking that is not implemented');
 assert.ok(!/pinecone|weaviate|qdrant|milvus/i.test(core+a+b),'Step 4 must not introduce external vector provider');
 assert.ok(b.includes('candidate_intelligence_forbidden')&&b.includes('stale_match_recompute_required'),'review/recompute authorization guards missing');
+for(const fn of ['xzrecruiter_complete_candidate_intelligence','xzrecruiter_review_candidate_intelligence','xzrecruiter_talent_match_search']){
+  assert.equal((b.match(new RegExp('create or replace function public\\.'+fn,'g'))||[]).length,1,'security-sensitive RPC must have exactly one canonical definition: '+fn);
+}
 
 const contextStart=a.indexOf('create or replace function public.xzrecruiter_candidate_intelligence_context');
 const beginStart=a.indexOf('create or replace function public.xzrecruiter_begin_candidate_intelligence');
