@@ -4,10 +4,10 @@ import { candidateMatchIdempotencyKey,candidateProfileHash } from '../lib/candid
 import { createCandidateInputHash } from '../lib/candidate-ai.mjs';
 import { loadFixtures,profileForFixture } from './step4-candidate-intelligence-test-helpers.mjs';
 
-const core=fs.readFileSync('supabase/migrations/20260925_step4_candidate_intelligence_core.sql','utf8');
-const a=fs.readFileSync('supabase/migrations/20260925_step4_candidate_intelligence_rpcs_a.sql','utf8');
-const b=fs.readFileSync('supabase/migrations/20260925_step4_candidate_intelligence_rpcs_b.sql','utf8');
-const stale=fs.readFileSync('supabase/migrations/20260925_step4_candidate_intelligence_stale_guards.sql','utf8');
+const core=fs.readFileSync('supabase/migrations/20260927_step4_candidate_intelligence_core.sql','utf8');
+const a=fs.readFileSync('supabase/migrations/20260927_step4_candidate_intelligence_rpcs_a.sql','utf8');
+const b=fs.readFileSync('supabase/migrations/20260927_step4_candidate_intelligence_rpcs_b.sql','utf8');
+const stale=fs.readFileSync('supabase/migrations/20260927_step4_candidate_intelligence_stale_guards.sql','utf8');
 const step3=fs.readFileSync('supabase/migrations/20260926_step3_recruiter_execution_workspace.sql','utf8');
 
 assert.ok(core.includes('unique(agency_id,idempotency_key)'),'match jobs need unique idempotency keys');
