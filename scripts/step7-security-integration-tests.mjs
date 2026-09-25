@@ -8,7 +8,7 @@ for(const token of [
   'u.disabled_at is null','am.active=true','s.revoked_at is null','s.expires_at>now()',
   'xzrecruiter_membership_session_guard','xzrecruiter_disabled_user_session_guard',
   'membership.role_changed','membership.removed','sessions_revoked',
-  'workspace_invitations_business_role_step7_check','membership.invite_created',
+  'workspace_invitations_business_role_check','membership.invite_created',
   'private.xzrecruiter_has_permission','private.xzrecruiter_candidate_object_access',
   'private.xzrecruiter_job_object_access','private.xzrecruiter_attachment_object_access',
   'private.xzrecruiter_entity_belongs_to_agency'
@@ -24,7 +24,7 @@ for(const [role,permissions] of Object.entries(ROLE_PERMISSIONS)){
     assert.ok(sql.includes("'"+permission+"'"),'DB capability map missing JS permission '+role+':'+permission);
   }
 }
-assert.ok(!/workspace_invitations_business_role_step7_check[\s\S]{0,500}'OWNER'/.test(sql),
+assert.ok(!/workspace_invitations_business_role_check[\s\S]{0,500}'OWNER'/.test(sql),
   'OWNER must never be assignable through invitation role constraint');
 
 for(const token of [
