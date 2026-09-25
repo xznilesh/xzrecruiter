@@ -13,6 +13,7 @@ import './step4-final-quality.css';
 import './step5.css';
 import './step5-extra.css';
 import './step5-closeout.css';
+import './step6-submission.css';
 
 export const metadata = {
   title: 'XZ Recruiter — Hiring Intelligence for Recruitment Agencies',
