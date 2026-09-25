@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { mutationRequestIsTrusted,declaredBodyWithin } from '@/lib/request-security';
+import { getRecruiterHome } from '@/lib/recruiter';
 import { atsAction } from '@/lib/ats';
 
 function sameOrigin(req) {
@@ -16,12 +18,26 @@ function statusFor(error) {
 }
 
 export async function POST(req) {
-  if (!sameOrigin(req)) return NextResponse.json({ error: 'Invalid origin.' }, { status: 403 });
+  if(!sameOrigin(req)||!mutationRequestIsTrusted(req))return NextResponse.json({ error: 'Invalid origin.' }, { status: 403 });
+  if(!declaredBodyWithin(req,1048576))return NextResponse.json({error:'request_too_large'},{status:413});
   let body;
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: 'Invalid request.' }, { status: 400 }); }
   try {
-    const result = await atsAction(String(body.action || ''), body.payload || {});
+    const action=String(body.action||'');
+    const protectedForRecruiter=new Set([
+      'saveJob','updateJobProfile','bulkJobAction',
+      'saveCandidate','updateCandidateProfile','archiveCandidate','mergeCandidates','bulkCandidateAction',
+      'candidateExport','portalAccess','prepareResumeUpload','applyResumeParse','candidateDocumentAccess',
+      'talentPoolMembership','createTalentPool','prepareAttachment','attachmentAccess','archiveAttachment'
+    ]);
+    if(protectedForRecruiter.has(action)){
+      const execution=await getRecruiterHome(1).catch(()=>null);
+      if(execution?.business_role==='RECRUITER'){
+        return NextResponse.json({ok:false,error:'execution_workspace_required'},{status:403});
+      }
+    }
+    const result = await atsAction(action, body.payload || {});
     if (!result?.ok) return NextResponse.json(result || { error: 'Action failed.' }, { status: statusFor(result?.error) });
     return NextResponse.json(result);
   } catch (error) {
