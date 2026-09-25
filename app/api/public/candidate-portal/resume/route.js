@@ -6,13 +6,12 @@ import { storageConfigured, uploadPrivateObject } from '@/lib/server-storage';
 import { validatePrivateUpload } from '@/lib/file-security';
 import { consumeRateLimit,rateLimitIdentityForRequest } from '@/lib/rate-limit';
 
-import { mutationRequestIsTrusted } from '@/lib/request-security';
+import { mutationRequestIsTrusted,declaredBodyWithin } from '@/lib/request-security';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 
 const ALLOWED=new Set(['application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document','text/plain']);
 const MAX_BYTES=8*1024*1024;
-function sameOrigin(req){const origin=req.headers.get('origin');return !origin||origin===req.nextUrl.origin}
 
 async function finalize(token,prepared,parsed,error=null){
  return rpc('xzrecruiter_candidate_portal_finalize_parse',{
@@ -26,7 +25,8 @@ async function finalize(token,prepared,parsed,error=null){
 }
 
 export async function POST(req){
- if(!sameOrigin(req))return NextResponse.json({error:'invalid_origin'},{status:403});
+  if(!mutationRequestIsTrusted(req))return NextResponse.json({error:'invalid_request_origin'},{status:403});
+  if(!declaredBodyWithin(req,MAX_BYTES+262144))return NextResponse.json({error:'request_too_large'},{status:413});
  if(!storageConfigured())return NextResponse.json({error:'storage_not_configured'},{status:503});
  let form;try{form=await req.formData()}catch{return NextResponse.json({error:'invalid_multipart'},{status:400})}
  const token=String(form.get('token')||'');const file=form.get('file');
