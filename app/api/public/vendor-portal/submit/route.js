@@ -19,7 +19,8 @@ export async function POST(req){
  const gate=await consumeRateLimit({
    scope:'public:vendor_submit',identity:rateLimitIdentityForRequest(req,token),limit:30,windowSeconds:600
  }).catch(()=>null);
- if(!gate?.allowed)return NextResponse.json({error:gate?.ok===false?'rate_limited':'Vendor portal is temporarily unavailable.'},{status:gate?.ok===false?429:503});
+ if(!gate?.ok)return NextResponse.json({error:'Vendor portal is temporarily unavailable.'},{status:503});
+ if(!gate.allowed)return NextResponse.json({error:'rate_limited'},{status:429});
  let fileBytes=null;
  if(file&&typeof file==='object'&&Number(file.size||0)>0){
    if(file.size>MAX_BYTES)return NextResponse.json({error:'invalid_file_size'},{status:413});
