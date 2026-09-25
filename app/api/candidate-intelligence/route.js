@@ -9,6 +9,7 @@ import {
   CANDIDATE_PROMPT_VERSION,CANDIDATE_MATCH_SCHEMA_VERSION,SCORING_CONFIG_VERSION
 } from '@/lib/candidate-intelligence.mjs';
 
+import { mutationRequestIsTrusted } from '@/lib/request-security';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 
