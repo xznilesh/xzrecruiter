@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { mutationRequestIsTrusted,declaredBodyWithin } from '@/lib/request-security';
 import { sessionToken } from '@/lib/auth';
 import { rpc } from '@/lib/supabase-api';
 
@@ -24,7 +25,8 @@ const actions = {
 };
 
 export async function POST(req) {
-  if (!sameOrigin(req)) return NextResponse.json({ error: 'Invalid origin.' }, { status: 403 });
+  if(!sameOrigin(req)||!mutationRequestIsTrusted(req))return NextResponse.json({ error: 'Invalid origin.' }, { status: 403 });
+  if(!declaredBodyWithin(req,524288))return NextResponse.json({error:'request_too_large'},{status:413});
   const token = await sessionToken();
   if (!token) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
   let body;
