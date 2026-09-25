@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-const core=fs.readFileSync('supabase/migrations/20260925_step4_candidate_intelligence_core.sql','utf8');
-const a=fs.readFileSync('supabase/migrations/20260925_step4_candidate_intelligence_rpcs_a.sql','utf8');
-const b=fs.readFileSync('supabase/migrations/20260925_step4_candidate_intelligence_rpcs_b.sql','utf8');
-const stale=fs.readFileSync('supabase/migrations/20260925_step4_candidate_intelligence_stale_guards.sql','utf8');
+const core=fs.readFileSync('supabase/migrations/20260927_step4_candidate_intelligence_core.sql','utf8');
+const a=fs.readFileSync('supabase/migrations/20260927_step4_candidate_intelligence_rpcs_a.sql','utf8');
+const b=fs.readFileSync('supabase/migrations/20260927_step4_candidate_intelligence_rpcs_b.sql','utf8');
+const stale=fs.readFileSync('supabase/migrations/20260927_step4_candidate_intelligence_stale_guards.sql','utf8');
 const resume=fs.readFileSync('app/api/recruiter/resume/route.js','utf8');
 const route=fs.readFileSync('app/api/candidate-intelligence/route.js','utf8');
 
