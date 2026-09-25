@@ -195,6 +195,9 @@ as $$
              and ra.job_id=a.job_id
              and ra.recruiter_user_id=p_user
              and ra.assignment_status='ACTIVE'
+            join public.recruitment_jobs j
+              on j.id=a.job_id and j.agency_id=p_agency and j.archived_at is null
+             and j.recruiter_ready=true and j.requirement_state='OPEN'
             where a.agency_id=p_agency
               and a.candidate_id=c.id
               and a.archived_at is null
@@ -221,11 +224,38 @@ as $$
           select 1 from public.requirement_recruiter_assignments ra
           where ra.agency_id=p_agency and ra.job_id=j.id
             and ra.recruiter_user_id=p_user and ra.assignment_status='ACTIVE'
+            and j.recruiter_ready=true and j.requirement_state='OPEN'
         )
       )
   );
 $$;
 revoke all on function private.xzrecruiter_job_object_access(uuid,uuid,text,uuid) from public,anon,authenticated;
+
+create or replace function private.xzrecruiter_entity_belongs_to_agency(
+  p_agency uuid,p_entity_type text,p_entity_id uuid
+) returns boolean
+language plpgsql
+stable
+security definer
+set search_path='public','private','pg_temp'
+as $fn$
+declare v_type text:=upper(coalesce(p_entity_type,''));
+begin
+  if p_agency is null or p_entity_id is null then return false; end if;
+  if v_type='CANDIDATE' then return exists(select 1 from public.candidates where id=p_entity_id and agency_id=p_agency and archived_at is null);
+  elsif v_type='JOB' then return exists(select 1 from public.recruitment_jobs where id=p_entity_id and agency_id=p_agency and archived_at is null);
+  elsif v_type='APPLICATION' then return exists(select 1 from public.applications where id=p_entity_id and agency_id=p_agency and archived_at is null);
+  elsif v_type='INTERVIEW' then return exists(select 1 from public.interviews where id=p_entity_id and agency_id=p_agency);
+  elsif v_type='OFFER' then return exists(select 1 from public.offers where id=p_entity_id and agency_id=p_agency);
+  elsif v_type='PLACEMENT' then return exists(select 1 from public.placements where id=p_entity_id and agency_id=p_agency);
+  elsif v_type='CLIENT' then return exists(select 1 from public.recruitment_clients where id=p_entity_id and agency_id=p_agency);
+  elsif v_type='SUBMISSION' then return exists(select 1 from public.candidate_submissions where id=p_entity_id and agency_id=p_agency);
+  elsif v_type='TASK' then return exists(select 1 from public.crm_tasks where id=p_entity_id and agency_id=p_agency and archived_at is null);
+  end if;
+  return false;
+end;
+$fn$;
+revoke all on function private.xzrecruiter_entity_belongs_to_agency(uuid,text,uuid) from public,anon,authenticated;
 
 create or replace function private.xzrecruiter_attachment_object_access(
   p_agency uuid,p_user uuid,p_business_role text,p_entity_type text,p_entity_id uuid
