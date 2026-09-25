@@ -9,7 +9,8 @@ const b=fs.readFileSync('supabase/migrations/20260925_step4_candidate_intelligen
 for(const index of [
   'idx_xzr_candidate_profile_skills_lookup','idx_xzr_candidate_profile_skills_candidate',
   'idx_xzr_candidate_intelligence_jobs','idx_xzr_candidate_match_current',
-  'idx_xzr_candidate_match_profile','idx_xzr_candidate_duplicate_source','idx_xzr_candidate_duplicate_compare'
+  'idx_xzr_candidate_match_profile','idx_xzr_candidate_duplicate_source','idx_xzr_candidate_duplicate_compare',
+  'idx_xzr_candidate_documents_checksum','idx_xzr_applications_source_reference'
 ])assert.ok(core.includes(index),'missing performance index '+index);
 assert.ok(b.includes('least(coalesce(p_limit,30),50)'),'talent discovery must be bounded');
 assert.ok(b.includes('where c.agency_id=v_agency'),'tenant scope must be applied before candidate ranking');
