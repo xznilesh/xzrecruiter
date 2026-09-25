@@ -35,7 +35,17 @@
     "test:step3:execution:e2e": "node scripts/step3-execution-e2e-tests.mjs",
     "test:step3:execution:security": "node scripts/step3-execution-security-tests.mjs",
     "test:step3:execution:performance": "node scripts/step3-execution-performance-tests.mjs",
-    "test:step3:execution:responsive": "node scripts/step3-execution-responsive-tests.mjs"
+    "test:step3:execution:responsive": "node scripts/step3-execution-responsive-tests.mjs",
+    "check:step4:candidate:syntax": "node scripts/step4-candidate-intelligence-static-check.mjs",
+    "test:step4:candidate:unit": "node scripts/step4-candidate-intelligence-unit-tests.mjs",
+    "test:step4:candidate:integration": "node scripts/step4-candidate-intelligence-integration-tests.mjs",
+    "test:step4:candidate:e2e": "node scripts/step4-candidate-intelligence-e2e-tests.mjs",
+    "test:step4:candidate:regression": "node scripts/step4-candidate-intelligence-regression-tests.mjs",
+    "test:step4:candidate:security": "node scripts/step4-candidate-intelligence-security-tests.mjs",
+    "test:step4:candidate:concurrency": "node scripts/step4-candidate-intelligence-concurrency-tests.mjs",
+    "test:step4:candidate:performance": "node scripts/step4-candidate-intelligence-performance-tests.mjs",
+    "test:step4:candidate:responsive": "node scripts/step4-candidate-intelligence-responsive-tests.mjs",
+    "test:step4:candidate:live": "node scripts/step4-candidate-intelligence-live-eval.mjs"
   },
   "dependencies": {
     "mammoth": "1.9.1",

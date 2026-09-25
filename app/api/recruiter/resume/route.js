@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { recruiterAction } from '@/lib/recruiter';
+import { candidateIntelligenceAction } from '@/lib/candidate-intelligence';
 import { extractResumeText,parseResumeText } from '@/lib/resume-parser';
 import { storageConfigured,uploadPrivateObject } from '@/lib/server-storage';
 
@@ -51,6 +52,13 @@ export async function POST(req){
       fieldConfidence:parsed.fieldConfidence,fieldEvidence:parsed.fieldEvidence,error:null
     });
     if(!finalized?.ok)return NextResponse.json(finalized,{status:400});
+    const textStored=await candidateIntelligenceAction('storeParseText',{
+      jobId,parseRunId:prepared.parse_run_id,extractedText:text
+    }).catch(()=>null);
+    if(!textStored?.ok){
+      console.error('candidate_intelligence_parse_text_store_failed',textStored?.error||'unavailable');
+      return NextResponse.json({error:'resume_intelligence_text_store_failed'},{status:503});
+    }
     return NextResponse.json({ok:true,reused:false,documentId:prepared.document_id,parseRunId:prepared.parse_run_id,versionNumber:prepared.version_number});
   }catch(error){
     await recruiterAction('finalizeResume',{jobId,parseRunId:prepared.parse_run_id,extractedData:{},fieldConfidence:{},fieldEvidence:{},error:error?.message||'parse_failed'}).catch(()=>null);
