@@ -26,7 +26,9 @@ assert.ok(sql.includes("criterion_kind='HARD_REQUIREMENT'")&&sql.includes('am_co
 assert.ok(sql.includes("v_started_at > now()-interval '5 minutes'"),'stale AI run recovery guard missing');
 assert.ok(sql.includes("'criteria',coalesce((")&&sql.includes("'clarifications',coalesce(("),'before/after audit must cover criteria and clarifications');
 assert.ok(sql.includes('country_code=coalesce(v_country,country_code)'),'unvalidated country values must not overwrite canonical country code');
-assert.ok(api.includes('sameOrigin')&&upload.includes('sameOrigin')&&documentRoute.includes('sameOrigin'));
+assert.ok(api.includes('mutationRequestIsTrusted(req)'),'JD mutation API must use Step-7 request-integrity boundary');
+assert.ok(upload.includes('mutationRequestIsTrusted(req)'),'JD upload must use Step-7 request-integrity boundary');
+assert.ok(documentRoute.includes('sameOrigin')||documentRoute.includes('mutationRequestIsTrusted(req)'),'JD document access must enforce request-origin integrity');
 assert.ok(upload.includes('JD_MAX_FILE_BYTES')&&upload.includes('JD_ALLOWED_MIME_TYPES'));
 assert.ok(server.includes('process.env.OPENAI_API_KEY'));
 assert.ok(!client.includes('OPENAI_API_KEY')&&!client.includes('SUPABASE_SERVICE_ROLE_KEY'),'client bundle must not name or reference server secret variables');
