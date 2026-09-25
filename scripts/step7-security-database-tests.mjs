@@ -23,12 +23,12 @@ for(const token of [
   "commercial.read_denied",
   "submission.am_review_denied",
   "submission.client_submit_denied",
-  "workspace_invitations_business_role_check",
-  "workspace_invitations_owner_escalation_check",
+  "workspace_invitations_business_role_step7_check",
   "j.recruiter_ready=true",
   "j.requirement_state='OPEN'",
   "j.approved_hiring_brief_id is not null"
 ]) assert.ok(s.includes(token),`missing Step-7 DB security control: ${token}`);
+assert.ok(!/workspace_invitations_business_role_step7_check[\s\S]{0,600}'OWNER'/.test(s),'OWNER must not be assignable through workspace invitations');
 
 for(const table of [
   'candidate_documents','recruitment_attachments','requirement_jd_sources','requirement_hiring_briefs',
