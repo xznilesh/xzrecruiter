@@ -38,7 +38,7 @@ for(const p of [
 assert.ok(auth.includes("'__Host-xz_session'"));
 assert.ok(auth.includes('httpOnly: true'));
 assert.ok(auth.includes("sameSite: 'lax'"));
-assert.ok(signup.includes('requiresEmailVerification: true'));
+assert.ok(/requiresEmailVerification\s*:\s*true/.test(signup));
 assert.ok(fs.existsSync(path.join(root,'app/api/auth/verify-email/route.js')));
 assert.ok(fs.existsSync(path.join(root,'app/api/auth/password-reset/complete/route.js')));
 assert.ok(!logo.includes('>XZ</text>'));
