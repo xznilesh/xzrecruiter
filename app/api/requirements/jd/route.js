@@ -82,7 +82,8 @@ export async function POST(req){
     const rate=await consumeRateLimit({
       scope:'ai:jd_analysis',identity:token,limit:20,windowSeconds:600
     }).catch(()=>null);
-    if(!rate?.allowed)return responseError(rate?.ok===false?'rate_limited':'jd_ai_rate_limit_unavailable',rate?.ok===false?429:503);
+    if(!rate?.ok)return responseError('jd_ai_rate_limit_unavailable',503);
+    if(!rate.allowed)return responseError('rate_limited',429);
     const jdText=sanitizeJdText(source.extracted_text||source.original_text||'');
     if(jdText.length<20)return responseError('jd_text_too_short');
 
