@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';
+import {buildClientFacingSubmission,buildSubmissionPack,clientContentLeaksInternalData} from '../lib/submission-pack.mjs';
+const sql=await readFile(new URL('../supabase/migrations/20260925_step6_submission_pack_rpcs.sql',import.meta.url),'utf8');
+const route=await readFile(new URL('../app/api/submissions/route.js',import.meta.url),'utf8');
+for(const guard of ['submission_access_forbidden','recruiter_only','am_only','client_submit_forbidden','duplicate_client_submission','stale_approval_blocked','stale_client_submission_blocked'])assert.ok(sql.includes(guard),guard);
+assert.ok(sql.includes("step6_quality_gate_endpoint_required")&&sql.includes("step6_client_submit_endpoint_required"),'legacy bypass not closed');
+assert.ok(sql.includes("d.candidate_id=v_s.candidate_id and d.job_id=v_s.job_id")&&sql.includes("d.client_id is not distinct from v_s.client_id"));
+assert.ok(route.includes('sameOrigin(req)')&&route.includes("if(!uuid(submissionId))"));
+assert.equal(route.includes('submissionPack:'),false,'route must not accept factual pack payload');
+const pack=buildSubmissionPack({application:{id:'a',candidacyState:'QUALIFIED'},candidate:{id:'c',fullName:'Test',salaryExpected:100},job:{id:'j'},requirement:{id:'b'},criteria:[],screening:{state:'QUALIFIED',completed:true,interestConfirmed:true},match:{id:'m',run_status:'SUCCEEDED',hard_rule_status:'PASS'},resume:{documentId:'r',versionNumber:1,isLatest:true},commercial:{clientBillRate:200,margin:100,markup:1},compliance:{satisfied:true}});
+assert.equal(clientContentLeaksInternalData(buildClientFacingSubmission(pack)),false);
+console.log('Step 6 security tests passed.');
