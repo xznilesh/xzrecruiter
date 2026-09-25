@@ -11,11 +11,10 @@ import {
   CANDIDATE_PROMPT_VERSION,CANDIDATE_MATCH_SCHEMA_VERSION,SCORING_CONFIG_VERSION
 } from '@/lib/candidate-intelligence.mjs';
 
-import { mutationRequestIsTrusted } from '@/lib/request-security';
+import { mutationRequestIsTrusted,declaredBodyWithin } from '@/lib/request-security';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 
-function sameOrigin(req){const origin=req.headers.get('origin');return !origin||origin===req.nextUrl.origin}
 function uuid(value){return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value||''))}
 function statusFor(error){
   if(error==='unauthorized')return 401;
@@ -61,7 +60,8 @@ export async function GET(req){
 }
 
 export async function POST(req){
-  if(!sameOrigin(req))return fail('invalid_origin');
+  if(!mutationRequestIsTrusted(req))return NextResponse.json({error:'invalid_request_origin'},{status:403});
+  if(!declaredBodyWithin(req,1048576))return NextResponse.json({error:'request_too_large'},{status:413});
   let body;try{body=await req.json()}catch{return fail('invalid_json')}
   const action=String(body?.action||'');
 
