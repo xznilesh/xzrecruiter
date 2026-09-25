@@ -34,7 +34,8 @@ export async function POST(req){
  const gate=await consumeRateLimit({
    scope:'public:candidate_portal_resume',identity:rateLimitIdentityForRequest(req,token),limit:20,windowSeconds:600
  }).catch(()=>null);
- if(!gate?.allowed)return NextResponse.json({error:gate?.ok===false?'rate_limited':'portal_temporarily_unavailable'},{status:gate?.ok===false?429:503});
+ if(!gate?.ok)return NextResponse.json({error:'portal_temporarily_unavailable'},{status:503});
+ if(!gate.allowed)return NextResponse.json({error:'rate_limited'},{status:429});
  if(!(file instanceof File))return NextResponse.json({error:'file_required'},{status:400});
  if(!ALLOWED.has(file.type))return NextResponse.json({error:'unsupported_file_type'},{status:415});
  if(!file.size||file.size>MAX_BYTES)return NextResponse.json({error:'invalid_file_size'},{status:413});
