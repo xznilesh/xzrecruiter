@@ -6,7 +6,7 @@ import { storageConfigured, uploadPrivateObject } from '@/lib/server-storage';
 import { validatePrivateUpload } from '@/lib/file-security';
 import { consumeRateLimit,rateLimitIdentityForRequest } from '@/lib/rate-limit';
 
-import { mutationRequestIsTrusted } from '@/lib/request-security';
+import { mutationRequestIsTrusted,declaredBodyWithin } from '@/lib/request-security';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 
@@ -26,7 +26,8 @@ async function finalize(token,prepared,parsed,error=null){
 }
 
 export async function POST(req){
- if(!sameOrigin(req))return NextResponse.json({error:'invalid_origin'},{status:403});
+ if(!sameOrigin(req)||!mutationRequestIsTrusted(req))return NextResponse.json({error:'invalid_origin'},{status:403});
+ if(!declaredBodyWithin(req,9*1024*1024))return NextResponse.json({error:'request_too_large'},{status:413});
  if(!storageConfigured())return NextResponse.json({error:'storage_not_configured'},{status:503});
  let form;try{form=await req.formData()}catch{return NextResponse.json({error:'invalid_multipart'},{status:400})}
  const token=String(form.get('token')||'');const file=form.get('file');
