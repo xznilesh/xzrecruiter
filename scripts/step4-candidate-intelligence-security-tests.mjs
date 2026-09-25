@@ -42,7 +42,7 @@ assert.ok(step3.includes('document_access_denied')||step3.includes('candidate_ac
 assert.ok(resume.includes('uploadPrivateObject')&&resume.includes('MAX_BYTES=8*1024*1024'),'resume storage must remain private and size-bounded');
 assert.ok(resume.includes('ALLOWED')&&resume.includes('application/pdf'),'malformed/unsupported file type boundary missing');
 
-assert.ok(api.includes('sameOrigin'),'candidate intelligence mutation API must enforce same-origin');
+assert.ok(api.includes('mutationRequestIsTrusted(req)'),'candidate intelligence mutation API must enforce Step-7 request integrity');
 assert.ok(api.includes("action==='review'")&&api.includes("action==='analyze'"));
 assert.ok(!ui.includes('OPENAI_API_KEY')&&!ui.includes('SUPABASE_SERVICE_ROLE_KEY'),'client bundle must not contain server secrets');
 assert.ok(!server.includes('NEXT_PUBLIC_OPENAI'),'AI secret/config must remain server-side');
