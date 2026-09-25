@@ -55,7 +55,16 @@
     "test:step6:submission:concurrency": "node scripts/step6-submission-concurrency-tests.mjs",
     "test:step6:submission:performance": "node scripts/step6-submission-performance-tests.mjs",
     "test:step6:submission:responsive": "node scripts/step6-submission-responsive-tests.mjs",
-    "test:step6": "npm run check:step6:submission:syntax && npm run test:step6:submission:unit && npm run test:step6:submission:integration && npm run test:step6:submission:e2e && npm run test:step6:submission:regression && npm run test:step6:submission:security && npm run test:step6:submission:concurrency && npm run test:step6:submission:performance && npm run test:step6:submission:responsive"
+    "test:step6": "npm run check:step6:submission:syntax && npm run test:step6:submission:unit && npm run test:step6:submission:integration && npm run test:step6:submission:e2e && npm run test:step6:submission:regression && npm run test:step6:submission:security && npm run test:step6:submission:concurrency && npm run test:step6:submission:performance && npm run test:step6:submission:responsive",
+    "typecheck": "node scripts/step5-screening-suite.mjs syntax",
+    "test:step5:screening:unit": "node scripts/step5-screening-suite.mjs unit",
+    "test:step5:screening:integration": "node scripts/step5-screening-suite.mjs integration",
+    "test:step5:screening:e2e": "node scripts/step5-screening-suite.mjs e2e",
+    "test:step5:screening:ai": "node scripts/step5-screening-suite.mjs ai",
+    "test:step5:screening:security": "node scripts/step5-screening-suite.mjs security",
+    "test:step5:screening:concurrency": "node scripts/step5-screening-suite.mjs concurrency",
+    "test:step5:screening:performance": "node scripts/step5-screening-suite.mjs performance",
+    "test:step5:screening": "node scripts/step5-screening-suite.mjs all"
   },
   "dependencies": {
     "mammoth": "1.9.1",
