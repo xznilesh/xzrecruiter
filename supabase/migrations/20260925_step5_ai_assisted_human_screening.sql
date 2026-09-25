@@ -68,7 +68,7 @@ create table if not exists public.candidate_fact_assertions (
   supersedes_fact_id uuid references public.candidate_fact_assertions(id) on delete set null,
   recorded_by_user_id uuid references public.users(id) on delete set null,
   created_at timestamptz not null default now(),
-  constraint screening_ai_never_verified check (not (source_type in ('AI_INFERENCE','UNKNOWN','RESUME_CLAIM') and verified=true))
+  constraint screening_ai_never_verified check (not (source_type in ('AI_INFERENCE','UNKNOWN','RESUME_CLAIM','CANDIDATE_DECLARED') and verified=true))
 );
 create index if not exists idx_xzr_screening_facts_candidate on public.candidate_fact_assertions(agency_id,candidate_id,fact_key,created_at desc);
 create index if not exists idx_xzr_screening_facts_application on public.candidate_fact_assertions(agency_id,application_id,fact_key,created_at desc);
@@ -284,7 +284,7 @@ begin
   for v_item in select value from jsonb_array_elements(v_facts) loop
     v_key:=btrim(coalesce(v_item->>'key',''));v_source:=upper(coalesce(nullif(v_item->>'source',''),'UNKNOWN'));v_verified:=coalesce((v_item->>'verified')::boolean,false);
     if v_key='' or v_source not in ('RESUME_CLAIM','AI_INFERENCE','RECRUITER_VERIFIED','CANDIDATE_DECLARED','DOCUMENT_VERIFIED','UNKNOWN') then return jsonb_build_object('ok',false,'error','invalid_fact_source'); end if;
-    if v_verified and v_source not in ('RECRUITER_VERIFIED','CANDIDATE_DECLARED','DOCUMENT_VERIFIED') then return jsonb_build_object('ok',false,'error','fake_verification_forbidden'); end if;
+    if v_verified and v_source not in ('RECRUITER_VERIFIED','DOCUMENT_VERIFIED') then return jsonb_build_object('ok',false,'error','fake_verification_forbidden'); end if;
     select fact_value into v_previous from public.candidate_fact_assertions where agency_id=v_agency and candidate_id=v_s.candidate_id and application_id=v_s.application_id and fact_key=v_key order by created_at desc limit 1;
     insert into public.candidate_fact_assertions(agency_id,candidate_id,application_id,screening_session_id,fact_key,fact_value,source_type,verified,evidence,supersedes_fact_id,recorded_by_user_id)
     values(v_agency,v_s.candidate_id,v_s.application_id,p_session_id,v_key,v_item->'value',v_source,v_verified,nullif(v_item->>'evidence',''),(select id from public.candidate_fact_assertions where agency_id=v_agency and candidate_id=v_s.candidate_id and application_id=v_s.application_id and fact_key=v_key order by created_at desc limit 1),v_user);
