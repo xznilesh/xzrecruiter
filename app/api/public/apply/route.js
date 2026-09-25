@@ -6,14 +6,13 @@ import { storageConfigured, uploadPrivateObject } from '@/lib/server-storage';
 import { validatePrivateUpload } from '@/lib/file-security';
 import { consumeRateLimit,rateLimitIdentityForRequest } from '@/lib/rate-limit';
 
-import { mutationRequestIsTrusted } from '@/lib/request-security';
+import { mutationRequestIsTrusted,declaredBodyWithin } from '@/lib/request-security';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 
 const ALLOWED=new Set(['application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document','text/plain']);
 const MAX_BYTES=8*1024*1024;
 
-function sameOrigin(req){const origin=req.headers.get('origin');return !origin||origin===req.nextUrl.origin;}
 function statusFor(error){if(error==='not_found')return 404;if(error==='already_applied')return 409;if(error==='consent_required'||error==='screening_required')return 422;if(error==='invalid_country'||error==='invalid_timezone'||error==='name_email_required'||error==='invalid_screening_answers')return 400;return 400;}
 function safeResponse(result,extra={}){return {ok:true,applicationId:result.application_id,...extra};}
 
@@ -32,7 +31,8 @@ async function parseInput(req){
 }
 
 export async function POST(req){
- if(!sameOrigin(req))return NextResponse.json({error:'Invalid origin.'},{status:403});
+  if(!mutationRequestIsTrusted(req))return NextResponse.json({error:'invalid_request_origin'},{status:403});
+  if(!declaredBodyWithin(req,MAX_BYTES+262144))return NextResponse.json({error:'request_too_large'},{status:413});
  let input;try{input=await parseInput(req)}catch(error){return NextResponse.json({error:error?.message==='invalid_payload'?'Invalid application details.':'Invalid request.'},{status:400});}
  const {slug,file}=input;const payload={...(input.payload||{})};
  if(!slug)return NextResponse.json({error:'Missing job.'},{status:400});
