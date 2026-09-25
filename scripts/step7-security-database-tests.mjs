@@ -66,6 +66,31 @@ assert.ok(s.includes("where id=p_document_id and agency_id=v_agency"),'candidate
 assert.ok(s.includes("private.xzrecruiter_candidate_object_access"),'object-level candidate authorization missing');
 assert.ok(s.includes("private.xzrecruiter_job_object_access"),'object-level requirement authorization missing');
 
+const grants=[...s.matchAll(/grant execute on function\s+([^;]+?)\s+to\s+([^;]+);/ig)].map(m=>({fn:m[1].trim(),roles:m[2].trim()}));
+const allowedPublicRpcPrefixes=[
+  'public.xzrecruiter_login(',
+  'public.xzrecruiter_security_event_context(',
+  'public.xzrecruiter_candidate_document_access(',
+  'public.xzrecruiter_attachment_context(',
+  'public.xzrecruiter_prepare_attachment(',
+  'public.xzrecruiter_attachment_access(',
+  'public.xzrecruiter_archive_attachment(',
+  'public.xzrecruiter_candidate_export(',
+  'public.xzrecruiter_save_candidate_submission(',
+  'public.xzrecruiter_review_internal_submission(',
+  'public.xzrecruiter_mark_client_submitted(',
+  'public.xzrecruiter_crm_dispatch('
+];
+for(const grant of grants){
+  if(grant.roles==='service_role'){
+    assert.ok(grant.fn.startsWith('public.xzrecruiter_consume_rate_limit('),'unexpected service-role RPC grant: '+grant.fn);
+    continue;
+  }
+  assert.ok(grant.roles==='anon,authenticated','unexpected execute grant roles: '+JSON.stringify(grant));
+  assert.ok(allowedPublicRpcPrefixes.some(prefix=>grant.fn.startsWith(prefix)),'unexpected public RPC re-grant: '+grant.fn);
+}
+assert.equal(grants.filter(g=>g.roles!=='service_role').length,allowedPublicRpcPrefixes.length,'public RPC whitelist changed without security review');
+
 assert.ok(!/\bdrop\s+table\b|\btruncate\b|alter\s+table\s+[^;]+\s+drop\s+column/i.test(s),'Step-7 migration contains unsafe destructive DDL');
 
-console.log('STEP7_DB_SECURITY_PASS session=true rls=true direct_grants_denied=true rbac=true object_auth=true classification=true audit=true migration_safe=true');
+console.log('STEP7_DB_SECURITY_PASS session=true rls=true direct_grants_denied=true rbac=true object_auth=true classification=true audit=true rpc_whitelist=true migration_safe=true');
