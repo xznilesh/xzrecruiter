@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import { NextResponse } from 'next/server';
+import { sessionToken } from '@/lib/auth';
+import { consumeRateLimit } from '@/lib/rate-limit';
 import { getCandidateIntelligenceContext,getCandidateIntelligenceInput,candidateIntelligenceAction } from '@/lib/candidate-intelligence';
 import { analyzeCandidateServer,candidateAiConfigured } from '@/lib/candidate-ai-server';
 import { createCandidateInputHash } from '@/lib/candidate-ai.mjs';
@@ -21,6 +23,7 @@ function statusFor(error){
   if(['candidate_not_found','match_not_found','intelligence_job_not_found','parse_run_not_found'].includes(error))return 404;
   if(['already_processing','candidate_intelligence_concurrent_conflict'].includes(error))return 409;
   if(['approved_brief_required','stale_input_during_analysis','stale_match_recompute_required','override_reason_required'].includes(error))return 422;
+  if(error==='rate_limited')return 429;
   if(error==='candidate_ai_timeout')return 504;
   if(error?.startsWith?.('candidate_ai_'))return 503;
   return 400;
@@ -68,6 +71,12 @@ export async function POST(req){
 
     const input=await getCandidateIntelligenceInput(jobId,candidateId).catch(()=>null);
     if(!input?.ok)return fail(input?.error||'candidate_intelligence_input_failed');
+    const token=await sessionToken();
+    if(!token)return fail('unauthorized');
+    const rate=await consumeRateLimit({
+      scope:'ai:candidate_intelligence',identity:token,limit:30,windowSeconds:600
+    }).catch(()=>null);
+    if(!rate?.allowed)return fail(rate?.ok===false?'rate_limited':'candidate_ai_rate_limit_unavailable');
 
     const candidate=input.candidate||{};
     const parseRun=input.parse_run||{};
