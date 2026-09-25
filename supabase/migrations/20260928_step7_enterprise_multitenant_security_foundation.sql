@@ -407,6 +407,68 @@ $fn$;
 revoke all on function public.xzrecruiter_security_event_context(text,integer) from public,anon,authenticated;
 grant execute on function public.xzrecruiter_security_event_context(text,integer) to anon,authenticated;
 
+create or replace function private.xzrecruiter_membership_session_guard()
+returns trigger
+language plpgsql
+security definer
+set search_path='public','private','pg_temp'
+as $fn$
+declare v_agency uuid;v_user uuid;v_role text;v_event text;
+begin
+  v_agency:=coalesce(new.agency_id,old.agency_id);
+  v_user:=coalesce(new.user_id,old.user_id);
+  v_role:=coalesce(new.role,old.role);
+
+  if tg_op='DELETE' then
+    v_event:='membership.removed';
+  elsif old.role is distinct from new.role then
+    v_event:='membership.role_changed';
+  elsif old.active is distinct from new.active then
+    v_event:=case when new.active then 'membership.enabled' else 'membership.disabled' end;
+  else
+    return coalesce(new,old);
+  end if;
+
+  update public.user_sessions
+  set revoked_at=coalesce(revoked_at,now())
+  where agency_id=v_agency and user_id=v_user and revoked_at is null;
+
+  perform private.xzrecruiter_log_security_event(
+    v_agency,null,v_role,v_event,'WARN','membership',v_user,
+    jsonb_build_object('sessions_revoked',true)
+  );
+  return coalesce(new,old);
+end;
+$fn$;
+revoke all on function private.xzrecruiter_membership_session_guard() from public,anon,authenticated;
+
+drop trigger if exists xzr_membership_session_guard on public.agency_memberships;
+create trigger xzr_membership_session_guard
+after update of role,active or delete on public.agency_memberships
+for each row execute function private.xzrecruiter_membership_session_guard();
+
+create or replace function private.xzrecruiter_disabled_user_session_guard()
+returns trigger
+language plpgsql
+security definer
+set search_path='public','private','pg_temp'
+as $fn$
+begin
+  if old.disabled_at is distinct from new.disabled_at and new.disabled_at is not null then
+    update public.user_sessions
+    set revoked_at=coalesce(revoked_at,now())
+    where user_id=new.id and revoked_at is null;
+  end if;
+  return new;
+end;
+$fn$;
+revoke all on function private.xzrecruiter_disabled_user_session_guard() from public,anon,authenticated;
+
+drop trigger if exists xzr_disabled_user_session_guard on public.users;
+create trigger xzr_disabled_user_session_guard
+after update of disabled_at on public.users
+for each row execute function private.xzrecruiter_disabled_user_session_guard();
+
 -- ---------------------------------------------------------------------------
 -- 4) Data classification
 -- ---------------------------------------------------------------------------
@@ -727,7 +789,7 @@ language plpgsql
 security definer
 set search_path='public','private','pg_temp'
 as $fn$
-declare v_agency uuid;v_user uuid;v_membership_role text;v_role text;v_result jsonb;
+declare v_agency uuid;v_user uuid;v_membership_role text;v_role text;v_result jsonb;v_rate jsonb;
 begin
   select agency_id,user_id,role into v_agency,v_user,v_membership_role from private.xzrecruiter_session_context(p_token);
   if v_agency is null then return jsonb_build_object('ok',false,'error','unauthorized'); end if;
@@ -735,6 +797,15 @@ begin
   if not private.xzrecruiter_has_permission(v_role,'candidate:export') then
     perform private.xzrecruiter_log_security_event(v_agency,v_user,v_role,'candidate.export_denied','HIGH','candidate',null,jsonb_build_object('requested_count',coalesce(array_length(p_candidate_ids,1),0)));
     return jsonb_build_object('ok',false,'error','bulk_export_forbidden');
+  end if;
+  v_rate:=public.xzrecruiter_consume_rate_limit(
+    'candidate:export',
+    encode(extensions.digest(v_agency::text||'|'||v_user::text,'sha256'),'hex'),
+    20,3600
+  );
+  if coalesce((v_rate->>'allowed')::boolean,false)=false then
+    perform private.xzrecruiter_log_security_event(v_agency,v_user,v_role,'candidate.export_rate_limited','HIGH','candidate',null);
+    return jsonb_build_object('ok',false,'error','rate_limited');
   end if;
   v_result:=public.xzrecruiter_candidate_export_step7_legacy(p_token,p_candidate_ids);
   perform private.xzrecruiter_log_security_event(v_agency,v_user,v_role,'candidate.export','WARN','candidate',null,jsonb_build_object('requested_count',coalesce(array_length(p_candidate_ids,1),0)));
