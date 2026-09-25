@@ -38,6 +38,9 @@ for(const table of [
   assert.ok(s.includes(`alter table public.${table}`)&&s.includes('data_classification'),`classification missing for ${table}`);
 }
 for(const level of ['PUBLIC_LOW','INTERNAL','CONFIDENTIAL','HIGHLY_SENSITIVE'])assert.ok(s.includes(level));
+for(const table of ['candidates','applications','recruitment_jobs','recruitment_clients','crm_tasks','recruitment_activity_events','interviews','offers','placements']){
+  assert.ok(s.includes("('"+table+"'"),'core entity classification foundation missing '+table);
+}
 
 assert.ok(s.includes("grant execute on function public.xzrecruiter_consume_rate_limit")&&s.includes("to service_role"),'rate limiter RPC must be service-role only');
 assert.ok(!/grant\s+(select|insert|update|delete)\s+on\s+all\s+tables\s+in\s+schema\s+public\s+to\s+(anon|authenticated)/i.test(s),'Step 7 must not restore broad direct table grants');
