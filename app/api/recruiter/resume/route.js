@@ -4,6 +4,7 @@ import { recruiterAction } from '@/lib/recruiter';
 import { candidateIntelligenceAction } from '@/lib/candidate-intelligence';
 import { extractResumeText,parseResumeText } from '@/lib/resume-parser';
 import { storageConfigured,uploadPrivateObject } from '@/lib/server-storage';
+import { validatePrivateUpload } from '@/lib/file-security';
 
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
@@ -28,6 +29,8 @@ export async function POST(req){
   if(!file.size||file.size>MAX_BYTES)return NextResponse.json({error:'invalid_file_size'},{status:413});
 
   const bytes=Buffer.from(await file.arrayBuffer());
+  try{validatePrivateUpload({bytes,mimeType:file.type,filename:file.name||'resume',sizeBytes:file.size})}
+  catch(error){return NextResponse.json({error:error?.message||'invalid_file'},{status:error?.message==='invalid_file_size'?413:415})}
   const checksum=createHash('sha256').update(bytes).digest('hex');
   const prepared=await recruiterAction('prepareResume',{
     jobId,candidateId,filename:file.name||'resume',mimeType:file.type,sizeBytes:file.size,checksum
