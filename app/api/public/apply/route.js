@@ -40,7 +40,8 @@ export async function POST(req){
  const gate=await consumeRateLimit({
    scope:'public:apply',identity:rateLimitIdentityForRequest(req,slug),limit:30,windowSeconds:600
  }).catch(()=>null);
- if(!gate?.allowed)return NextResponse.json({error:gate?.ok===false?'rate_limited':'application_service_unavailable'},{status:gate?.ok===false?429:503});
+ if(!gate?.ok)return NextResponse.json({error:'application_service_unavailable'},{status:503});
+ if(!gate.allowed)return NextResponse.json({error:'rate_limited'},{status:429});
  let fileBytes=null;
  if(file){
    if(!ALLOWED.has(file.type))return NextResponse.json({error:'unsupported_file_type'},{status:415});
