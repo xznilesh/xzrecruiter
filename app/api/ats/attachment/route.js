@@ -3,6 +3,7 @@ import { atsAction } from '@/lib/ats';
 import { createSignedPrivateUrl, storageConfigured, uploadPrivateObject } from '@/lib/server-storage';
 import { validatePrivateUpload } from '@/lib/file-security';
 
+import { mutationRequestIsTrusted } from '@/lib/request-security';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const ALLOWED=new Set(['application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document','text/plain','image/png','image/jpeg']);
