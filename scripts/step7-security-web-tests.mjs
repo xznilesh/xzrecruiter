@@ -22,6 +22,11 @@ for(const file of walk('app').filter((p)=>/\.(js|jsx|mjs)$/.test(p))){
 }
 assert.deepEqual(appFiles,[],'untrusted app content must not use dangerouslySetInnerHTML');
 
+const proxy=fs.readFileSync('proxy.js','utf8');
+assert.ok(proxy.includes("headers.set('x-request-id',requestId)"),'request correlation id must propagate into app request headers');
+assert.ok(proxy.includes("response.headers.set('x-request-id',requestId)"),'request correlation id must be returned to caller');
+assert.ok(proxy.includes('safeRequestId(request)'),'request IDs must be validated or server-generated');
+
 const config=fs.readFileSync('next.config.mjs','utf8');
 for(const token of [
   "default-src 'self'","object-src 'none'","frame-ancestors 'none'","base-uri 'self'",
@@ -40,4 +45,4 @@ assert.equal(mutationRequestIsTrusted(req({origin:'',fetchSite:'',referer:'https
 assert.equal(declaredBodyWithin(req({length:'1000'}),1024),true);
 assert.equal(declaredBodyWithin(req({length:'2000'}),1024),false);
 
-console.log('STEP7_WEB_SECURITY_PASS xss=true csv_formula=true csrf=true payload_bounds=true headers=true');
+console.log('STEP7_WEB_SECURITY_PASS xss=true csv_formula=true csrf=true payload_bounds=true headers=true request_ids=true');
