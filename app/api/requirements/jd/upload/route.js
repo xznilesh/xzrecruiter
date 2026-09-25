@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { jdAction } from '@/lib/jd';
 import { extractJdDocumentText, JD_ALLOWED_MIME_TYPES, JD_MAX_FILE_BYTES } from '@/lib/jd-document-parser';
 import { storageConfigured, uploadPrivateObject } from '@/lib/server-storage';
+import { validatePrivateUpload } from '@/lib/file-security';
 
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
@@ -23,6 +24,8 @@ export async function POST(req){
   if(!file.size||file.size>JD_MAX_FILE_BYTES)return NextResponse.json({error:'invalid_file_size'},{status:413});
 
   const bytes=Buffer.from(await file.arrayBuffer());
+  try{validatePrivateUpload({bytes,mimeType:file.type,filename:file.name||'jd-document',sizeBytes:file.size,maxBytes:JD_MAX_FILE_BYTES})}
+  catch(error){return NextResponse.json({error:error?.message||'invalid_file'},{status:error?.message==='invalid_file_size'?413:415})}
   const checksum=createHash('sha256').update(bytes).digest('hex');
   const prepared=await jdAction('prepareSource',{
     jobId,sourceType:'UPLOAD',filename:file.name||'jd-document',mimeType:file.type,sizeBytes:file.size,checksum,
