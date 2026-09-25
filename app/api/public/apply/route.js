@@ -3,7 +3,10 @@ import { NextResponse } from 'next/server';
 import { rpc } from '@/lib/supabase-api';
 import { extractResumeText, parseResumeText } from '@/lib/resume-parser';
 import { storageConfigured, uploadPrivateObject } from '@/lib/server-storage';
+import { validatePrivateUpload } from '@/lib/file-security';
+import { consumeRateLimit,rateLimitIdentityForRequest } from '@/lib/rate-limit';
 
+import { mutationRequestIsTrusted } from '@/lib/request-security';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 
@@ -34,10 +37,19 @@ export async function POST(req){
  const {slug,file}=input;const payload={...(input.payload||{})};
  if(!slug)return NextResponse.json({error:'Missing job.'},{status:400});
  if(payload.consent!==true)return NextResponse.json({error:'consent_required'},{status:422});
+ const gate=await consumeRateLimit({
+   scope:'public:apply',identity:rateLimitIdentityForRequest(req,slug),limit:30,windowSeconds:600
+ }).catch(()=>null);
+ if(!gate?.ok)return NextResponse.json({error:'application_service_unavailable'},{status:503});
+ if(!gate.allowed)return NextResponse.json({error:'rate_limited'},{status:429});
+ let fileBytes=null;
  if(file){
    if(!ALLOWED.has(file.type))return NextResponse.json({error:'unsupported_file_type'},{status:415});
    if(!file.size||file.size>MAX_BYTES)return NextResponse.json({error:'invalid_file_size'},{status:413});
    if(!storageConfigured())return NextResponse.json({error:'resume_storage_not_configured'},{status:503});
+   fileBytes=Buffer.from(await file.arrayBuffer());
+   try{validatePrivateUpload({bytes:fileBytes,mimeType:file.type,filename:file.name||'resume',sizeBytes:file.size})}
+   catch(error){return NextResponse.json({error:error?.message||'invalid_file'},{status:error?.message==='invalid_file_size'?413:415})}
    payload.hasResumeFile=true;
  }
 
@@ -53,7 +65,7 @@ export async function POST(req){
    return NextResponse.json(safeResponse(result,{resumeUploaded:false,warning:'resume_token_unavailable'}),{status:201});
  }
 
- const bytes=Buffer.from(await file.arrayBuffer());
+ const bytes=fileBytes;
  const checksum=createHash('sha256').update(bytes).digest('hex');
  let prepared;
  try{
