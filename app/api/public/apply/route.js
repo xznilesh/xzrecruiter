@@ -5,6 +5,7 @@ import { extractResumeText, parseResumeText } from '@/lib/resume-parser';
 import { storageConfigured, uploadPrivateObject } from '@/lib/server-storage';
 import { validatePrivateUpload } from '@/lib/file-security';
 
+import { mutationRequestIsTrusted } from '@/lib/request-security';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 
