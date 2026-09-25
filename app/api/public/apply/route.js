@@ -4,6 +4,7 @@ import { rpc } from '@/lib/supabase-api';
 import { extractResumeText, parseResumeText } from '@/lib/resume-parser';
 import { storageConfigured, uploadPrivateObject } from '@/lib/server-storage';
 import { validatePrivateUpload } from '@/lib/file-security';
+import { consumeRateLimit,rateLimitIdentityForRequest } from '@/lib/rate-limit';
 
 import { mutationRequestIsTrusted } from '@/lib/request-security';
 export const runtime='nodejs';
@@ -36,6 +37,10 @@ export async function POST(req){
  const {slug,file}=input;const payload={...(input.payload||{})};
  if(!slug)return NextResponse.json({error:'Missing job.'},{status:400});
  if(payload.consent!==true)return NextResponse.json({error:'consent_required'},{status:422});
+ const gate=await consumeRateLimit({
+   scope:'public:apply',identity:rateLimitIdentityForRequest(req,slug),limit:30,windowSeconds:600
+ }).catch(()=>null);
+ if(!gate?.allowed)return NextResponse.json({error:gate?.ok===false?'rate_limited':'application_service_unavailable'},{status:gate?.ok===false?429:503});
  let fileBytes=null;
  if(file){
    if(!ALLOWED.has(file.type))return NextResponse.json({error:'unsupported_file_type'},{status:415});
