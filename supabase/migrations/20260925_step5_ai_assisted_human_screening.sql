@@ -49,6 +49,7 @@ alter table public.application_screening_answers add column if not exists ai_met
 alter table public.application_screening_answers add column if not exists answer_source text not null default 'UNKNOWN';
 alter table public.application_screening_answers add column if not exists answered_by_user_id uuid references public.users(id) on delete set null;
 alter table public.application_screening_answers add column if not exists answer_version integer not null default 1;
+alter table public.application_screening_answers add column if not exists required boolean not null default false;
 alter table public.application_screening_answers drop constraint if exists application_screening_answers_application_id_question_key_key;
 create unique index if not exists application_screening_answers_legacy_uq on public.application_screening_answers(application_id,question_key) where screening_session_id is null;
 create unique index if not exists application_screening_answers_session_uq on public.application_screening_answers(screening_session_id,question_key) where screening_session_id is not null;
@@ -277,8 +278,8 @@ begin
   for v_q in select value from jsonb_array_elements(coalesce(v_requirement_snapshot->'screeningQuestions','[]'::jsonb)) loop
     v_i:=v_i+1;v_key:=coalesce(nullif(btrim(v_q->>'id'),''),'approved_'||v_i);v_text:=btrim(coalesce(v_q->>'question',''));v_category:=upper(coalesce(nullif(v_q->>'category',''),'ROLE_FIT'));v_priority:=upper(coalesce(nullif(v_q->>'priority',''),'MEDIUM'));v_reason:='Approved requisition screening question.';
     if v_text<>'' and lower(v_text) !~ '(race|caste|religion|sexual orientation|political view|family status|marital status|pregnan|appearance|ethnicity|disability|date of birth)' then
-      insert into public.application_screening_answers(agency_id,application_id,screening_session_id,question_key,question_text,category,priority,reason,related_requirement,source_evidence,ai_metadata,knockout,answer_source)
-      values(v_agency,p_application_id,v_id,v_key,v_text,v_category,v_priority,v_reason,nullif(v_q->>'relatedRequirement',''),'["APPROVED_REQUIREMENT"]'::jsonb,jsonb_build_object('engine','GROUNDED_SCREENING_V1'),coalesce((v_q->>'knockout')::boolean,false),'UNKNOWN') on conflict do nothing;
+      insert into public.application_screening_answers(agency_id,application_id,screening_session_id,question_key,question_text,category,priority,reason,related_requirement,source_evidence,ai_metadata,knockout,required,answer_source)
+      values(v_agency,p_application_id,v_id,v_key,v_text,v_category,v_priority,v_reason,nullif(v_q->>'relatedRequirement',''),'["APPROVED_REQUIREMENT"]'::jsonb,jsonb_build_object('engine','GROUNDED_SCREENING_V1'),coalesce((v_q->>'knockout')::boolean,false),coalesce((v_q->>'required')::boolean,false),'UNKNOWN') on conflict do nothing;
     end if;
   end loop;
   perform private.xzrecruiter_log_activity(v_agency,v_user,'screening',v_id,'screening.started','Human screening started',jsonb_build_object('application_id',p_application_id,'candidate_id',v_candidate,'job_id',v_job));
@@ -346,10 +347,12 @@ begin
   if v_s.version<>p_expected_version then return jsonb_build_object('ok',false,'error','stale_screening_version','current_version',v_s.version); end if;
   if v_outcome not in ('QUALIFIED','NOT_QUALIFIED','CANDIDATE_NOT_INTERESTED','NO_RESPONSE','ON_HOLD','WITHDRAWN','FOLLOW_UP_REQUIRED') then return jsonb_build_object('ok',false,'error','invalid_screening_outcome'); end if;
   if v_outcome='QUALIFIED' and v_s.candidate_interest<>'INTERESTED' then return jsonb_build_object('ok',false,'error','candidate_interest_required'); end if;
+  if v_outcome='CANDIDATE_NOT_INTERESTED' and v_s.candidate_interest<>'NOT_INTERESTED' then return jsonb_build_object('ok',false,'error','candidate_interest_outcome_mismatch'); end if;
+  if v_outcome='QUALIFIED' and exists(select 1 from public.application_screening_answers q where q.agency_id=v_agency and q.screening_session_id=p_session_id and (q.question_key like 'must_have_%' or q.required=true) and (q.answer is null or q.answer='null'::jsonb or q.answer='""'::jsonb)) then return jsonb_build_object('ok',false,'error','qualification_requirements_missing'); end if;
 
   v_hard_status:=upper(coalesce(v_s.intelligence_snapshot->>'hardRuleStatus',v_s.intelligence_snapshot->>'hard_rule_status','UNKNOWN'));
   v_non_overridable:=coalesce((v_s.intelligence_snapshot->>'nonOverridable')::boolean,(v_s.intelligence_snapshot->>'non_overridable')::boolean,false);
-  if v_outcome='QUALIFIED' and v_hard_status='FAIL' and v_non_overridable then return jsonb_build_object('ok',false,'error','non_overridable_hard_rule'); end if;
+  if v_outcome='QUALIFIED' and v_hard_status in ('FAIL','UNKNOWN') and v_non_overridable then return jsonb_build_object('ok',false,'error','non_overridable_hard_rule'); end if;
   if v_outcome='QUALIFIED' and v_hard_status in ('WARN','FAIL') then
     v_override_reason:=btrim(coalesce(p_override->>'reason',''));
     if v_override_reason='' then return jsonb_build_object('ok',false,'error','override_reason_required'); end if;
