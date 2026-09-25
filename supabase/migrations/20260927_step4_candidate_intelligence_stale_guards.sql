@@ -80,13 +80,13 @@ returns trigger
 language plpgsql security invoker
 set search_path='public','private','pg_temp'
 as $fn$
-declare v_agency uuid;v_candidate uuid;v_is_primary boolean;v_archived timestamptz;
+declare v_agency uuid;v_candidate uuid;v_is_primary boolean;v_document_type text;
 begin
   v_agency:=coalesce(new.agency_id,old.agency_id);
   v_candidate:=coalesce(new.candidate_id,old.candidate_id);
   v_is_primary:=coalesce(new.is_primary,false) or coalesce(old.is_primary,false);
-  v_archived:=coalesce(new.archived_at,old.archived_at);
-  if v_is_primary or tg_op='INSERT' then
+  v_document_type:=upper(coalesce(new.document_type,old.document_type,''));
+  if v_document_type='RESUME' and (v_is_primary or tg_op='INSERT') then
     perform private.xzrecruiter_mark_candidate_matches_stale(v_agency,v_candidate,'RESUME_VERSION_CHANGED');
   end if;
   return coalesce(new,old);
@@ -124,7 +124,11 @@ language plpgsql security invoker
 set search_path='public','private','pg_temp'
 as $fn$
 begin
-  if tg_op='INSERT' or old.active is distinct from new.active or old.weights is distinct from new.weights or old.version_key is distinct from new.version_key then
+  if (tg_op='INSERT' and new.active=true)
+     or (tg_op='UPDATE' and (
+       old.active is distinct from new.active
+       or (new.active=true and (old.weights is distinct from new.weights or old.version_key is distinct from new.version_key))
+     )) then
     update public.candidate_match_runs
     set run_status='STALE',stale_at=coalesce(stale_at,now()),stale_reason='SCORING_CONFIG_CHANGED'
     where agency_id=new.agency_id and run_status='SUCCEEDED';
