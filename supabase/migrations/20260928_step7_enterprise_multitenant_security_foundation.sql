@@ -132,7 +132,7 @@ as $$
     when 'BUSINESS_DEVELOPMENT' then 'ACCOUNT_MANAGER'
     when 'BDM' then 'ACCOUNT_MANAGER'
     when 'SOURCER' then 'RECRUITER'
-    when 'HIRING_MANAGER' then 'RECRUITMENT_MANAGER'
+    when 'HIRING_MANAGER' then 'HIRING_MANAGER'
     else upper(coalesce(private.xzrecruiter_business_role(p_agency,p_user,p_membership_role),''))
   end;
 $$;
@@ -679,6 +679,19 @@ grant execute on function public.xzrecruiter_archive_attachment(text,uuid) to an
 -- ---------------------------------------------------------------------------
 -- 7) Bulk export, submission idempotency and race hardening
 -- ---------------------------------------------------------------------------
+do $do$
+begin
+  if exists(
+    select 1
+    from public.candidate_submissions
+    group by agency_id,application_id
+    having count(*)>1
+  ) then
+    raise exception 'step7_preflight_duplicate_candidate_submissions';
+  end if;
+end
+$do$;
+
 create unique index if not exists uq_xzr_submission_application
   on public.candidate_submissions(agency_id,application_id);
 
