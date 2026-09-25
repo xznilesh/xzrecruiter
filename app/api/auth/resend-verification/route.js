@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import { requestEmailProof } from '@/lib/supabase-api';
 import { consumeRateLimit,rateLimitIdentityForRequest } from '@/lib/rate-limit';
-import { mutationRequestIsTrusted } from '@/lib/request-security';
+import { mutationRequestIsTrusted,declaredBodyWithin } from '@/lib/request-security';
 
 export async function POST(req){
   if(!mutationRequestIsTrusted(req))return NextResponse.json({error:'Invalid request origin.'},{status:403});
+  if(!declaredBodyWithin(req,16*1024))return NextResponse.json({error:'Request is too large.'},{status:413});
   let body;
   try{body=await req.json();}
   catch{return NextResponse.json({error:'Invalid request.'},{status:400});}
