@@ -4,7 +4,7 @@ import { storageConfigured,uploadPrivateObject } from '@/lib/server-storage';
 import { validatePrivateUpload } from '@/lib/file-security';
 import { consumeRateLimit,rateLimitIdentityForRequest } from '@/lib/rate-limit';
 
-import { mutationRequestIsTrusted } from '@/lib/request-security';
+import { mutationRequestIsTrusted,declaredBodyWithin } from '@/lib/request-security';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const MAX_BYTES=8*1024*1024;
@@ -12,7 +12,8 @@ const ALLOWED=new Set(['application/pdf','application/vnd.openxmlformats-officed
 function sameOrigin(req){const origin=req.headers.get('origin');return !origin||origin===req.nextUrl.origin;}
 
 export async function POST(req){
- if(!sameOrigin(req))return NextResponse.json({error:'Invalid origin.'},{status:403});
+ if(!sameOrigin(req)||!mutationRequestIsTrusted(req))return NextResponse.json({error:'Invalid origin.'},{status:403});
+ if(!declaredBodyWithin(req,9*1024*1024))return NextResponse.json({error:'request_too_large'},{status:413});
  let form;try{form=await req.formData();}catch{return NextResponse.json({error:'Invalid request.'},{status:400});}
  const token=String(form.get('token')||'');let payload={};try{payload=JSON.parse(String(form.get('payload')||'{}'));}catch{return NextResponse.json({error:'Invalid candidate payload.'},{status:400});}
  const file=form.get('file');if(!token)return NextResponse.json({error:'Missing portal token.'},{status:400});
