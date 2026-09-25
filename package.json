@@ -52,7 +52,7 @@
     "test:step7": "npm run test:step7:api && npm run test:step7:database && npm run test:step7:files && npm run test:step7:secrets && npm run test:step7:concurrency && npm run test:step7:web && npm run test:step7:rbac && npm run test:step7:ai-jobs && npm run test:step7:performance"
   },
   "dependencies": {
-    "mammoth": "1.9.1",
+    "mammoth": "1.12.3",
     "next": "16.3.3",
     "pdf-parse": "1.1.1",
     "react": "19.2.0",
