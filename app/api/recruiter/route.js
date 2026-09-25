@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { mutationRequestIsTrusted,declaredBodyWithin } from '@/lib/request-security';
 import { getRecruiterHome,getRecruiterRequirement,recruiterAction } from '@/lib/recruiter';
 
 export const runtime='nodejs';
@@ -17,7 +18,8 @@ function statusFor(error){
 function fail(error,extra={}){return NextResponse.json({ok:false,error,...extra},{status:statusFor(error)})}
 
 export async function GET(req){
-  if(!sameOrigin(req))return fail('invalid_origin');
+  if(!sameOrigin(req)||!mutationRequestIsTrusted(req))return fail('invalid_origin');
+  if(!declaredBodyWithin(req,1048576))return NextResponse.json({error:'request_too_large'},{status:413});
   const mode=req.nextUrl.searchParams.get('mode')||'home';
   if(mode==='home'){
     const result=await getRecruiterHome(50).catch(()=>null);
@@ -41,7 +43,8 @@ export async function GET(req){
 }
 
 export async function POST(req){
-  if(!sameOrigin(req))return fail('invalid_origin');
+  if(!sameOrigin(req)||!mutationRequestIsTrusted(req))return fail('invalid_origin');
+  if(!declaredBodyWithin(req,1048576))return NextResponse.json({ok:false,error:'request_too_large'},{status:413});
   let body;try{body=await req.json()}catch{return fail('invalid_json')}
   const action=String(body?.action||'');
 
