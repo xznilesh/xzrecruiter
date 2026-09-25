@@ -3,7 +3,10 @@ import { NextResponse } from 'next/server';
 import { rpc } from '@/lib/supabase-api';
 import { extractResumeText, parseResumeText } from '@/lib/resume-parser';
 import { storageConfigured, uploadPrivateObject } from '@/lib/server-storage';
+import { validatePrivateUpload } from '@/lib/file-security';
+import { consumeRateLimit,rateLimitIdentityForRequest } from '@/lib/rate-limit';
 
+import { mutationRequestIsTrusted } from '@/lib/request-security';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 
@@ -28,10 +31,18 @@ export async function POST(req){
  let form;try{form=await req.formData()}catch{return NextResponse.json({error:'invalid_multipart'},{status:400})}
  const token=String(form.get('token')||'');const file=form.get('file');
  if(token.length<24)return NextResponse.json({error:'invalid_token'},{status:400});
+ const gate=await consumeRateLimit({
+   scope:'public:candidate_portal_resume',identity:rateLimitIdentityForRequest(req,token),limit:20,windowSeconds:600
+ }).catch(()=>null);
+ if(!gate?.ok)return NextResponse.json({error:'portal_temporarily_unavailable'},{status:503});
+ if(!gate.allowed)return NextResponse.json({error:'rate_limited'},{status:429});
  if(!(file instanceof File))return NextResponse.json({error:'file_required'},{status:400});
  if(!ALLOWED.has(file.type))return NextResponse.json({error:'unsupported_file_type'},{status:415});
  if(!file.size||file.size>MAX_BYTES)return NextResponse.json({error:'invalid_file_size'},{status:413});
- const bytes=Buffer.from(await file.arrayBuffer());const checksum=createHash('sha256').update(bytes).digest('hex');
+ const bytes=Buffer.from(await file.arrayBuffer());
+ try{validatePrivateUpload({bytes,mimeType:file.type,filename:file.name||'resume',sizeBytes:file.size})}
+ catch(error){return NextResponse.json({error:error?.message||'invalid_file'},{status:error?.message==='invalid_file_size'?413:415})}
+ const checksum=createHash('sha256').update(bytes).digest('hex');
  let prepared;
  try{
   prepared=await rpc('xzrecruiter_candidate_portal_prepare_document',{p_portal_token:token,p_filename:file.name||'resume',p_mime_type:file.type,p_size_bytes:file.size,p_checksum:checksum});
