@@ -1245,9 +1245,16 @@ begin
     return jsonb_build_object('ok',true,'taskId',v_task);
   elsif v_action='ACKNOWLEDGE_BLOCKER' then
     begin v_recruiter:=(p_payload->>'recruiterUserId')::uuid; exception when others then return jsonb_build_object('ok',false,'error','invalid_recruiter'); end;
-    update public.requirement_recruiter_assignments set blocker_reason=null,blocker_owner_user_id=null,updated_at=now()
-    where agency_id=v_agency and job_id=v_job and recruiter_user_id=v_recruiter;
-    perform private.xzrecruiter_log_activity(v_agency,v_user,'job',v_job,'requirement.blocker_acknowledged','Manager acknowledged/cleared execution blocker',jsonb_build_object('recruiter_user_id',v_recruiter));
+    if not exists(
+      select 1 from public.requirement_recruiter_assignments a
+      where a.agency_id=v_agency and a.job_id=v_job and a.recruiter_user_id=v_recruiter
+        and a.assignment_status='ACTIVE' and a.blocker_reason is not null
+    ) then return jsonb_build_object('ok',false,'error','blocker_not_found'); end if;
+    perform private.xzrecruiter_log_activity(
+      v_agency,v_user,'job',v_job,'requirement.blocker_acknowledged',
+      'Manager acknowledged execution blocker',
+      jsonb_build_object('recruiter_user_id',v_recruiter,'blocker_preserved',true)
+    );
   else return jsonb_build_object('ok',false,'error','unsupported_action'); end if;
 
   return jsonb_build_object('ok',true,'action',v_action);
