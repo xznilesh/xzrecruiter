@@ -107,6 +107,128 @@ end;
 $$;
 revoke all on function private.xzrecruiter_step8_ensure_task(uuid,text,text,text,text,timestamptz,uuid,uuid,uuid,uuid,text) from public,anon,authenticated;
 
+create or replace function private.xzrecruiter_step8_alert_condition_holds(
+  p_agency uuid,p_alert_id uuid
+) returns boolean
+language plpgsql stable security definer
+set search_path='public','private','pg_temp'
+as $
+declare
+  v_alert public.automation_alerts%rowtype;v_cfg public.automation_control_configs%rowtype;
+  v_tz text;v_day date;v_start timestamptz;v_end timestamptz;v_cutoff timestamptz;v_hours_cutoff numeric;
+  v_target integer;v_valid integer;
+begin
+  select * into v_alert from public.automation_alerts where agency_id=p_agency and id=p_alert_id;
+  if v_alert.id is null then return false; end if;
+  select * into v_cfg from public.automation_control_configs where agency_id=p_agency;
+  if v_cfg.agency_id is null then return false; end if;
+  v_tz:=private.xzrecruiter_step8_timezone(p_agency);
+  v_day:=(timezone(v_tz,now()))::date;
+  v_start:=v_day::timestamp at time zone v_tz;
+  v_end:=(v_day+1)::timestamp at time zone v_tz;
+  v_cutoff:=(v_day::timestamp+v_cfg.business_day_cutoff_local) at time zone v_tz;
+  v_hours_cutoff:=extract(epoch from (v_cutoff-now()))/3600.0;
+
+  if v_alert.rule_code='REQUIREMENT_HEALTH' then
+    return exists(
+      select 1 from public.requirement_health_current h
+      join public.recruitment_jobs j on j.id=h.job_id and j.agency_id=p_agency
+      where h.agency_id=p_agency and h.job_id=v_alert.job_id
+        and h.health_status in ('NEEDS_ATTENTION','AT_RISK','BLOCKED')
+        and j.archived_at is null and j.recruiter_ready=true and j.requirement_state='OPEN'
+        and j.approved_hiring_brief_id is not null and upper(coalesce(j.status,'OPEN'))='OPEN'
+    );
+  elsif v_alert.rule_code='RECRUITER_TARGET_GAP' then
+    select coalesce(a.daily_submission_target,0) into v_target
+    from public.requirement_recruiter_assignments a
+    join public.recruitment_jobs j on j.id=a.job_id and j.agency_id=p_agency
+    where a.agency_id=p_agency and a.job_id=v_alert.job_id and a.recruiter_user_id=v_alert.owner_user_id
+      and a.assignment_status='ACTIVE' and j.archived_at is null and j.recruiter_ready=true
+      and j.requirement_state='OPEN' and j.approved_hiring_brief_id is not null
+      and upper(coalesce(j.status,'OPEN'))='OPEN';
+    if coalesce(v_target,0)<=0 or v_hours_cutoff>v_cfg.target_attention_hours_before_cutoff then return false; end if;
+    select count(distinct s.application_id)::integer into v_valid
+    from public.candidate_submissions s
+    join public.applications ap on ap.id=s.application_id and ap.agency_id=p_agency
+    where s.agency_id=p_agency and s.job_id=v_alert.job_id and s.created_by_user_id=v_alert.owner_user_id
+      and s.workflow_status='CLIENT_SUBMITTED' and s.status='SUBMITTED'
+      and s.invalidated_at is null and s.withdrawn_at is null
+      and upper(coalesce(ap.stage,'')) not in ('WITHDRAWN','REJECTED')
+      and s.client_submitted_at>=v_start and s.client_submitted_at<v_end;
+    return coalesce(v_valid,0)<v_target;
+  elsif v_alert.rule_code='PIPELINE_STAGNATION' then
+    return exists(
+      select 1 from public.applications a
+      join public.recruitment_jobs j on j.id=a.job_id and j.agency_id=p_agency
+      where a.agency_id=p_agency and a.id=v_alert.application_id and a.archived_at is null
+        and upper(coalesce(a.status,'ACTIVE'))='ACTIVE'
+        and coalesce(a.last_activity_at,a.stage_entered_at,a.updated_at)<now()-make_interval(hours=>v_cfg.pipeline_stagnation_hours)
+        and upper(coalesce(a.stage,'')) not in ('REJECTED','WITHDRAWN','HIRED','PLACED')
+        and j.archived_at is null and j.recruiter_ready=true and j.requirement_state='OPEN'
+        and j.approved_hiring_brief_id is not null and upper(coalesce(j.status,'OPEN'))='OPEN'
+    );
+  elsif v_alert.rule_code='SCREENING_ACTION_OVERDUE' then
+    return exists(
+      select 1 from public.application_screening_sessions s
+      where s.agency_id=p_agency and s.id=v_alert.entity_id
+        and s.status in ('SCREENING_PENDING','IN_PROGRESS','FOLLOW_UP_REQUIRED')
+        and s.updated_at<now()-make_interval(hours=>v_cfg.screening_attention_hours)
+    );
+  elsif v_alert.rule_code='FOLLOW_UP_OVERDUE' then
+    return exists(
+      select 1 from public.crm_tasks t
+      where t.agency_id=p_agency and t.id=v_alert.entity_id and t.archived_at is null
+        and t.status in ('OPEN','IN_PROGRESS') and t.due_at is not null and t.due_at<now()
+    );
+  elsif v_alert.rule_code='AM_REVIEW_OVERDUE' then
+    return exists(
+      select 1 from public.candidate_submissions s
+      where s.agency_id=p_agency and s.id=v_alert.entity_id and s.workflow_status='INTERNAL_SUBMITTED'
+        and coalesce(s.internal_submitted_at,s.updated_at)<now()-make_interval(hours=>v_cfg.am_review_attention_hours)
+    );
+  elsif v_alert.rule_code='CLIENT_FEEDBACK_OVERDUE' then
+    return exists(
+      select 1 from public.candidate_submissions s
+      where s.agency_id=p_agency and s.id=v_alert.entity_id and s.workflow_status='CLIENT_SUBMITTED'
+        and s.client_submitted_at<now()-make_interval(hours=>v_cfg.client_feedback_attention_hours)
+        and not exists(
+          select 1 from public.recruitment_activity_events e
+          where e.agency_id=p_agency and e.entity_type='application' and e.entity_id=s.application_id
+            and e.action='client.feedback_received' and e.occurred_at>=s.client_submitted_at
+        )
+    );
+  elsif v_alert.rule_code='INTERVIEW_UPCOMING' then
+    return exists(
+      select 1 from public.interviews i
+      where i.agency_id=p_agency and i.id=v_alert.entity_id
+        and upper(coalesce(i.status,'SCHEDULED'))='SCHEDULED'
+        and i.scheduled_at between now() and now()+make_interval(hours=>v_cfg.interview_reminder_hours)
+    );
+  elsif v_alert.rule_code='DOCUMENT_EXPIRY' then
+    return exists(
+      select 1 from public.candidate_documents d
+      where d.agency_id=p_agency and d.id=v_alert.entity_id and d.archived_at is null
+        and d.expires_at is not null and d.expires_at<=now()+interval '7 days'
+    );
+  elsif v_alert.rule_code='OFFER_ACTION_OVERDUE' then
+    return exists(
+      select 1 from public.offers o
+      where o.agency_id=p_agency and o.id=v_alert.entity_id and o.sent_at is not null
+        and o.accepted_at is null and o.declined_at is null and o.withdrawn_at is null
+        and o.sent_at<now()-make_interval(hours=>v_cfg.offer_action_hours)
+    );
+  elsif v_alert.rule_code='JOINING_ACTION' then
+    return exists(
+      select 1 from public.placements p
+      where p.agency_id=p_agency and p.id=v_alert.entity_id and p.status in ('PLANNED','CONFIRMED')
+        and p.start_date<=v_day+v_cfg.joining_action_days
+    );
+  end if;
+  return false;
+end;
+$;
+revoke all on function private.xzrecruiter_step8_alert_condition_holds(uuid,uuid) from public,anon,authenticated;
+
 create or replace function private.xzrecruiter_step8_run_agency(
   p_agency uuid,p_run_kind text default 'SCHEDULED',p_worker text default null
 ) returns jsonb
@@ -146,7 +268,9 @@ begin
       j.owner_user_id,j.updated_at,j.client_id,
       exists(select 1 from public.requirement_recruiter_assignments ra where ra.agency_id=p_agency and ra.job_id=j.id and ra.assignment_status='ACTIVE' and ra.blocker_reason is not null) explicit_blocker
     from public.recruitment_jobs j
-    where j.agency_id=p_agency and j.archived_at is null and upper(coalesce(j.status,'OPEN')) in ('OPEN','ON_HOLD')
+    where j.agency_id=p_agency and j.archived_at is null
+      and j.recruiter_ready=true and j.requirement_state='OPEN' and j.approved_hiring_brief_id is not null
+      and upper(coalesce(j.status,'OPEN')) in ('OPEN','ON_HOLD')
   loop
     if upper(coalesce(v_job.status,'OPEN'))='ON_HOLD' then
       v_reasons:=jsonb_build_array('REQUIREMENT_ON_HOLD');
@@ -479,11 +603,12 @@ begin
     select p.id,p.application_id,p.candidate_id,p.job_id,p.recruiter_user_id,p.start_date,c.full_name
     from public.placements p left join public.candidates c on c.id=p.candidate_id and c.agency_id=p_agency
     where p.agency_id=p_agency and p.status in ('PLANNED','CONFIRMED')
-      and p.start_date between v_day and v_day+v_cfg.joining_action_days
+      and p.start_date<=v_day+v_cfg.joining_action_days
     order by p.start_date limit 300
   loop
     perform private.xzrecruiter_step8_upsert_alert(
-      p_agency,v_run,'JOINING_ACTION','JOINING_ACTION','INFO','placement',v_place.id,
+      p_agency,v_run,'JOINING_ACTION','JOINING_ACTION',
+      case when v_place.start_date<v_day then 'URGENT' else 'INFO' end,'placement',v_place.id,
       v_place.job_id,v_place.application_id,v_place.candidate_id,v_place.recruiter_user_id,'RECRUITMENT_MANAGER',
       jsonb_build_array('JOINING_UPCOMING'),coalesce(v_place.full_name,'Candidate')||' joining requires confirmation',
       'Confirm joining/start status and record the outcome.',v_place.start_date::timestamp at time zone v_tz,
@@ -496,6 +621,7 @@ begin
     update public.automation_alerts a set lifecycle='RESOLVED',resolved_at=now(),resolution_reason='UNDERLYING_CONDITION_CLEARED'
     where a.agency_id=p_agency and a.lifecycle in ('OPEN','ACKNOWLEDGED','DISMISSED')
       and a.last_detected_run_id is distinct from v_run
+      and not private.xzrecruiter_step8_alert_condition_holds(p_agency,a.id)
     returning a.id,a.dedupe_key
   )
   select count(*)::integer into v_resolved from resolved;
@@ -697,8 +823,8 @@ begin
   v_start:=v_day::timestamp at time zone v_tz;v_end:=(v_day+1)::timestamp at time zone v_tz;
 
   select jsonb_build_object(
-    'activeRequirements',(select count(*) from public.recruitment_jobs j where j.agency_id=v_agency and j.archived_at is null and upper(coalesce(j.status,'OPEN'))='OPEN'),
-    'plannedSubmissions',(select coalesce(sum(j.submission_target_daily),0) from public.recruitment_jobs j where j.agency_id=v_agency and j.archived_at is null and upper(coalesce(j.status,'OPEN'))='OPEN'),
+    'activeRequirements',(select count(*) from public.recruitment_jobs j where j.agency_id=v_agency and j.archived_at is null and j.recruiter_ready=true and j.requirement_state='OPEN' and j.approved_hiring_brief_id is not null and upper(coalesce(j.status,'OPEN'))='OPEN'),
+    'plannedSubmissions',(select coalesce(sum(j.submission_target_daily),0) from public.recruitment_jobs j where j.agency_id=v_agency and j.archived_at is null and j.recruiter_ready=true and j.requirement_state='OPEN' and j.approved_hiring_brief_id is not null and upper(coalesce(j.status,'OPEN'))='OPEN'),
     'validSubmissions',(select count(distinct s.application_id)
       from public.candidate_submissions s join public.applications ap on ap.id=s.application_id and ap.agency_id=v_agency
       where s.agency_id=v_agency and s.workflow_status='CLIENT_SUBMITTED' and s.status='SUBMITTED'
@@ -739,7 +865,9 @@ begin
     from public.recruitment_jobs j
     left join public.recruitment_clients c on c.id=j.client_id and c.agency_id=v_agency
     left join public.requirement_health_current h on h.agency_id=v_agency and h.job_id=j.id
-    where j.agency_id=v_agency and j.archived_at is null and upper(coalesce(j.status,'OPEN'))='OPEN'
+    where j.agency_id=v_agency and j.archived_at is null
+      and j.recruiter_ready=true and j.requirement_state='OPEN' and j.approved_hiring_brief_id is not null
+      and upper(coalesce(j.status,'OPEN'))='OPEN'
     limit greatest(1,least(coalesce(p_limit,50),100))
   ) x;
 
@@ -1101,7 +1229,7 @@ begin
   select agency_id,user_id,role into v_agency,v_user,v_membership from private.xzrecruiter_session_context(p_token);
   if v_agency is null then return jsonb_build_object('ok',false,'error','unauthorized'); end if;
   v_role:=private.xzrecruiter_business_role(v_agency,v_user,v_membership);
-  if v_role not in ('OWNER','ADMIN','ACCOUNT_MANAGER','RECRUITMENT_MANAGER') then return jsonb_build_object('ok',false,'error','forbidden'); end if;
+  if v_role not in ('OWNER','ADMIN','ACCOUNT_MANAGER') then return jsonb_build_object('ok',false,'error','forbidden'); end if;
   select job_id into v_job from public.applications where id=p_application_id and agency_id=v_agency and archived_at is null;
   if v_job is null then return jsonb_build_object('ok',false,'error','application_not_found'); end if;
   if not exists(select 1 from public.candidate_submissions where agency_id=v_agency and application_id=p_application_id and workflow_status='CLIENT_SUBMITTED') then return jsonb_build_object('ok',false,'error','client_submission_required'); end if;
