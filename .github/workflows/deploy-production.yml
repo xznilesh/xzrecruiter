@@ -1,0 +1,49 @@
+name: XZRecruiter production deploy
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: xzrecruiter-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npm run test:step9
+      - run: npm run build
+        env:
+          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/postgres
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+      - name: Link Vercel project
+        run: |
+          mkdir -p .vercel
+          printf '%s\n' '{"orgId":"team_bT56lx8ghZNKQb0mhkZ2T5tt","projectId":"prj_VtHZ6iRBJ7mqG3malUibM34euUsf"}' > .vercel/project.json
+      - name: Pull production configuration
+        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      - name: Build production artifact
+        run: vercel build --prod --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      - name: Deploy production artifact
+        run: |
+          url="$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")"
+          echo "Production URL: $url"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+        id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      - name: Readiness smoke
+        run: |
+          node -e "fetch('https://xzrecruiter.vercel.app/api/health/ready',{cache:'no-store'}).then(async r=>{const t=await r.text();console.log(r.status,t);if(r.status!==200)process.exit(1)})"
