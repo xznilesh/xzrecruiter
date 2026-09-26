@@ -7,16 +7,14 @@ function walk(dir){
     const p=path.join(dir,e.name);return e.isDirectory()?walk(p):[p];
   }):[];
 }
-const files=[...walk('lib'),...walk('app'),...walk('supabase/migrations')].filter((p)=>/.(js|mjs|sql)$/.test(p));
-const joined=files.map((f)=>fs.readFileSync(f,'utf8')).join('
-');
+const files=[...walk('lib'),...walk('app'),...walk('supabase/migrations')].filter((p)=>/\.(js|mjs|sql)$/.test(p));
+const joined=files.map((f)=>fs.readFileSync(f,'utf8')).join('\n');
 
 for(const table of ['requirement_ai_runs','candidate_intelligence_jobs']){
   if(joined.includes('public.'+table)){
     const matches=files.filter((f)=>fs.readFileSync(f,'utf8').includes('public.'+table));
     assert.ok(matches.length>0);
-    const definitions=matches.map((f)=>fs.readFileSync(f,'utf8')).join('
-');
+    const definitions=matches.map((f)=>fs.readFileSync(f,'utf8')).join('\n');
     assert.ok(/agency_id/i.test(definitions),`${table}: AI/job storage must carry tenant context`);
   }
 }
