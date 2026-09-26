@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { mutationRequestIsTrusted,declaredBodyWithin } from '@/lib/request-security';
-import { getRecruiterHome } from '@/lib/recruiter';
-import { atsAction } from '@/lib/ats';
+import { atsAction,getAtsContext } from '@/lib/ats';
 
 function sameOrigin(req) {
   const origin = req.headers.get('origin');
@@ -32,8 +31,8 @@ export async function POST(req) {
       'talentPoolMembership','createTalentPool','prepareAttachment','attachmentAccess','archiveAttachment'
     ]);
     if(protectedForRecruiter.has(action)){
-      const execution=await getRecruiterHome(1).catch(()=>null);
-      if(execution?.business_role==='RECRUITER'){
+      const execution=await getAtsContext('candidates','',1,0).catch(()=>null);
+      if(String(execution?.role||'').toUpperCase()==='RECRUITER'){
         return NextResponse.json({ok:false,error:'execution_workspace_required'},{status:403});
       }
     }
