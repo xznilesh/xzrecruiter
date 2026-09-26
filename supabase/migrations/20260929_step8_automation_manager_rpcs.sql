@@ -1281,7 +1281,7 @@ grant execute on function public.xzrecruiter_step8_record_client_feedback(text,u
 -- DB-native scheduler. Tenant advisory locks make overlapping event/full runs retry-safe.
 select cron.schedule(
   'xzrecruiter-step8-events',
-  '*/5 * * * *',
+  '* * * * *',
   $step8_events$select public.xzrecruiter_run_step8_pending_events('pg-cron',25);$step8_events$
 );
 
