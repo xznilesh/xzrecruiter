@@ -16,8 +16,12 @@ async function run(req){
   if(!authorized(req))return NextResponse.json({ok:false,error:'unauthorized',requestId},{status:401});
   if(!serviceRpcConfigured())return NextResponse.json({ok:false,error:'service_rpc_not_configured',requestId},{status:503});
   try{
-    const result=await serviceRpc('xzrecruiter_run_step8_all_tenants',{p_worker:`cron:${requestId}`});
-    return NextResponse.json({...result,requestId});
+    const mode=String(req.nextUrl.searchParams.get('mode')||'full').toLowerCase();
+    if(!['full','events'].includes(mode))return NextResponse.json({ok:false,error:'invalid_mode',requestId},{status:400});
+    const result=mode==='events'
+      ? await serviceRpc('xzrecruiter_run_step8_pending_events',{p_worker:`cron:${requestId}`,p_tenant_limit:25})
+      : await serviceRpc('xzrecruiter_run_step8_all_tenants',{p_worker:`cron:${requestId}`});
+    return NextResponse.json({...result,mode,requestId});
   }catch(error){
     console.error('step8_automation_run_failed',{requestId,error:error?.message||'unknown'});
     return NextResponse.json({ok:false,error:'automation_run_failed',requestId},{status:500});
