@@ -197,7 +197,7 @@ as $$
              and ra.assignment_status='ACTIVE'
             join public.recruitment_jobs j
               on j.id=a.job_id and j.agency_id=p_agency and j.archived_at is null
-             and j.recruiter_ready=true and j.requirement_state='OPEN'
+             and j.recruiter_ready=true and j.requirement_state='OPEN' and j.approved_hiring_brief_id is not null
             where a.agency_id=p_agency
               and a.candidate_id=c.id
               and a.archived_at is null
@@ -225,6 +225,7 @@ as $$
           where ra.agency_id=p_agency and ra.job_id=j.id
             and ra.recruiter_user_id=p_user and ra.assignment_status='ACTIVE'
             and j.recruiter_ready=true and j.requirement_state='OPEN'
+            and j.approved_hiring_brief_id is not null
         )
       )
   );
@@ -330,17 +331,20 @@ create table if not exists public.organization_data_governance(
   updated_at timestamptz not null default now()
 );
 
+-- Invitation records are future privilege-bearing inputs: constrain them to Step-7 business roles.
 alter table public.workspace_invitations
   drop constraint if exists workspace_invitations_business_role_step7_check;
 alter table public.workspace_invitations
-  add constraint workspace_invitations_business_role_step7_check
-  check (
-    upper(business_role) in (
-      'ADMIN','RECRUITMENT_MANAGER','RECRUITER','SOURCER',
-      'BUSINESS_DEVELOPMENT','ACCOUNT_MANAGER','HIRING_MANAGER',
-      'INTERVIEWER','VIEWER_ANALYST','COMPLIANCE_REVIEWER'
-    )
-  ) not valid;
+  drop constraint if exists workspace_invitations_business_role_check;
+alter table public.workspace_invitations
+  add constraint workspace_invitations_business_role_check
+  check (business_role in ('ADMIN','RECRUITMENT_MANAGER','ACCOUNT_MANAGER','RECRUITER','COMPLIANCE_REVIEWER','CLIENT_USER'));
+
+alter table public.workspace_invitations
+  drop constraint if exists workspace_invitations_owner_escalation_check;
+alter table public.workspace_invitations
+  add constraint workspace_invitations_owner_escalation_check
+  check (upper(coalesce(business_role,'')) <> 'OWNER');
 
 create table if not exists public.security_rate_limits(
   scope text not null,
