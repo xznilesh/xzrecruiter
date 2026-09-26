@@ -716,12 +716,14 @@ returns jsonb
 language plpgsql stable security definer
 set search_path='public','private','pg_temp'
 as $$
-declare v_agency uuid;v_user uuid;v_membership text;v_role text;v_job jsonb;v_assign jsonb;v_pipeline jsonb;v_alerts jsonb;v_activity jsonb;v_health jsonb;
+declare v_agency uuid;v_user uuid;v_membership text;v_role text;v_job jsonb;v_assign jsonb;v_pipeline jsonb;v_alerts jsonb;v_activity jsonb;v_health jsonb;v_members jsonb;v_tz text;v_day date;v_start timestamptz;v_end timestamptz;
 begin
   select agency_id,user_id,role into v_agency,v_user,v_membership from private.xzrecruiter_session_context(p_token);
   if v_agency is null then return jsonb_build_object('ok',false,'error','unauthorized'); end if;
   v_role:=private.xzrecruiter_business_role(v_agency,v_user,v_membership);
   if not private.xzrecruiter_has_permission(v_role,'manager:view') then return jsonb_build_object('ok',false,'error','forbidden'); end if;
+  v_tz:=private.xzrecruiter_step8_timezone(v_agency);v_day:=(timezone(v_tz,now()))::date;
+  v_start:=v_day::timestamp at time zone v_tz;v_end:=(v_day+1)::timestamp at time zone v_tz;
   if not exists(select 1 from public.recruitment_jobs where id=p_job_id and agency_id=v_agency and archived_at is null) then return jsonb_build_object('ok',false,'error','job_not_found'); end if;
 
   select jsonb_build_object('id',j.id,'title',j.title,'clientId',j.client_id,'client',c.name,'priority',j.priority,'deadline',j.target_fill_date,
@@ -734,7 +736,21 @@ begin
   select coalesce(jsonb_agg(to_jsonb(x) order by x.recruiter),'[]'::jsonb) into v_assign from (
     select a.id,a.recruiter_user_id,coalesce(u.display_name,u.email) recruiter,a.daily_submission_target,a.total_submission_target,a.manager_priority,
       a.priority_context,a.manager_instructions,a.blocker_reason,a.assigned_at,
-      (select count(distinct s.application_id) from public.candidate_submissions s where s.agency_id=v_agency and s.job_id=p_job_id and s.created_by_user_id=a.recruiter_user_id and s.workflow_status='CLIENT_SUBMITTED' and s.status='SUBMITTED') submissions,
+      (select count(distinct s.application_id) from public.candidate_submissions s
+        where s.agency_id=v_agency and s.job_id=p_job_id and s.created_by_user_id=a.recruiter_user_id
+          and s.workflow_status='CLIENT_SUBMITTED' and s.status='SUBMITTED'
+          and s.invalidated_at is null and s.withdrawn_at is null
+          and s.client_submitted_at>=v_start and s.client_submitted_at<v_end) submissions_today,
+      greatest(a.daily_submission_target-(select count(distinct s.application_id) from public.candidate_submissions s
+        where s.agency_id=v_agency and s.job_id=p_job_id and s.created_by_user_id=a.recruiter_user_id
+          and s.workflow_status='CLIENT_SUBMITTED' and s.status='SUBMITTED'
+          and s.invalidated_at is null and s.withdrawn_at is null
+          and s.client_submitted_at>=v_start and s.client_submitted_at<v_end),0) remaining_target,
+      case when a.daily_submission_target=0 then 0 else least(100,round(100.0*(select count(distinct s.application_id) from public.candidate_submissions s
+        where s.agency_id=v_agency and s.job_id=p_job_id and s.created_by_user_id=a.recruiter_user_id
+          and s.workflow_status='CLIENT_SUBMITTED' and s.status='SUBMITTED'
+          and s.invalidated_at is null and s.withdrawn_at is null
+          and s.client_submitted_at>=v_start and s.client_submitted_at<v_end)/a.daily_submission_target,1)) end achievement_percent,
       (select count(*) from public.applications ap where ap.agency_id=v_agency and ap.job_id=p_job_id and ap.owner_user_id=a.recruiter_user_id and ap.archived_at is null and upper(coalesce(ap.status,'ACTIVE'))='ACTIVE') pipeline,
       (select count(*) from public.crm_tasks t where t.agency_id=v_agency and t.job_id=p_job_id and t.assigned_user_id=a.recruiter_user_id and t.archived_at is null and t.status in ('OPEN','IN_PROGRESS') and t.due_at<now()) due_actions
     from public.requirement_recruiter_assignments a join public.users u on u.id=a.recruiter_user_id
@@ -761,6 +777,13 @@ begin
     limit 100
   ) x;
 
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'userId',m.user_id,'name',coalesce(u.display_name,u.email),
+    'role',private.xzrecruiter_business_role(m.agency_id,m.user_id,m.role)
+  ) order by coalesce(u.display_name,u.email)),'[]'::jsonb) into v_members
+  from public.agency_memberships m join public.users u on u.id=m.user_id
+  where m.agency_id=v_agency and private.xzrecruiter_business_role(m.agency_id,m.user_id,m.role) in ('RECRUITER','RECRUITMENT_MANAGER');
+
   select coalesce(jsonb_agg(to_jsonb(x) order by x.occurred_at desc),'[]'::jsonb) into v_activity from (
     select e.action,e.summary,e.actor_user_id,e.occurred_at,e.metadata
     from public.recruitment_activity_events e
@@ -770,7 +793,9 @@ begin
     )
     order by e.occurred_at desc limit 50
   ) x;
-  return jsonb_build_object('ok',true,'job',v_job,'health',coalesce(v_health,'{}'::jsonb),'assignments',v_assign,'pipeline',v_pipeline,'exceptions',v_alerts,'activity',v_activity);
+  return jsonb_build_object('ok',true,'role',v_role,'timezone',v_tz,'businessDate',v_day,
+    'job',v_job,'health',coalesce(v_health,'{}'::jsonb),'assignments',v_assign,'eligibleRecruiters',v_members,
+    'pipeline',v_pipeline,'exceptions',v_alerts,'activity',v_activity);
 end;
 $$;
 revoke all on function public.xzrecruiter_step8_requirement_control(text,uuid) from public,anon,authenticated;
