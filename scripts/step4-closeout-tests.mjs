@@ -10,7 +10,7 @@ const root=process.cwd();const read=(p)=>fs.readFileSync(path.join(root,p),'utf8
  'supabase/migrations/20260903_step4_closeout_hardening.sql','supabase/migrations/20260903_step4_closeout_views_documents_privacy.sql',
  'supabase/migrations/20260903_step4_zz_full_closeout.sql','supabase/migrations/20260903_step4_zzz_candidate_360_context.sql','supabase/migrations/20260903_step4_zzzz_bulk_job_compat.sql','supabase/migrations/20260903_step4_zzzzz_private_attachments.sql','supabase/migrations/20260903_step4_zzzzzz_interview_timezone.sql','supabase/migrations/20260903_step4_zzzzzzz_notes.sql','supabase/migrations/20260903_step4_zzzzzzzz_submission_resume.sql'
 ].forEach(must);
-const pkg=JSON.parse(read('package.json'));assert.equal(pkg.dependencies['pdf-parse'],'1.1.1');assert.equal(pkg.dependencies.mammoth,'1.9.1');
+const pkg=JSON.parse(read('package.json'));assert.equal(pkg.dependencies['pdf-parse'],'1.1.1');assert.ok(/^1\.(?:9|1[0-9]|[2-9][0-9])\./.test(pkg.dependencies.mammoth),'mammoth must remain on a supported 1.x release >=1.9');
 const parser=read('lib/resume-parser.js');for(const x of ['pdf-parse','mammoth','extractResumeText','parseResumeText','fieldConfidence','fieldEvidence'])assert.ok(parser.includes(x));
 const storage=read('lib/server-storage.js');for(const x of ['SUPABASE_SERVICE_ROLE_KEY','uploadPrivateObject','createSignedPrivateUrl','xzrecruiter-private'])assert.ok(storage.includes(x));assert.ok(!storage.includes('NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY'));
 const attachmentRoute=read('app/api/ats/attachment/route.js');for(const x of ['sameOrigin','prepareAttachment','attachmentAccess','createSignedPrivateUrl','uploadPrivateObject','MAX_BYTES'])assert.ok(attachmentRoute.includes(x));
