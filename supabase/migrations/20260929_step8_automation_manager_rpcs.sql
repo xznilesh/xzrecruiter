@@ -684,7 +684,7 @@ set search_path='public','private','pg_temp'
 as $$
 declare
   v_agency uuid;v_user uuid;v_membership text;v_role text;v_tz text;v_day date;v_start timestamptz;v_end timestamptz;
-  v_today jsonb;v_requirements jsonb;v_recruiters jsonb;v_exceptions jsonb;v_am jsonb;v_interviews jsonb;v_offers jsonb;v_joinings jsonb;
+  v_today jsonb;v_requirements jsonb;v_recruiters jsonb;v_exceptions jsonb;v_am jsonb;v_interviews jsonb;v_offers jsonb;v_joinings jsonb;v_filters jsonb;
 begin
   select agency_id,user_id,role into v_agency,v_user,v_membership from private.xzrecruiter_session_context(p_token);
   if v_agency is null then return jsonb_build_object('ok',false,'error','unauthorized'); end if;
@@ -809,9 +809,35 @@ begin
     order by p.start_date limit 50
   ) x;
 
+  select jsonb_build_object(
+    'clients',coalesce((select jsonb_agg(jsonb_build_object('id',x.id,'name',x.name) order by x.name) from (
+      select c.id,c.name from public.recruitment_clients c where c.agency_id=v_agency and c.archived_at is null order by c.name limit 100
+    ) x),'[]'::jsonb),
+    'requirements',coalesce((select jsonb_agg(jsonb_build_object('id',x.id,'title',x.title) order by x.title) from (
+      select j.id,j.title from public.recruitment_jobs j where j.agency_id=v_agency and j.archived_at is null order by j.title limit 150
+    ) x),'[]'::jsonb),
+    'recruiters',coalesce((select jsonb_agg(jsonb_build_object('id',x.user_id,'name',x.name) order by x.name) from (
+      select m.user_id,coalesce(u.display_name,u.email) name
+      from public.agency_memberships m join public.users u on u.id=m.user_id
+      where m.agency_id=v_agency and private.xzrecruiter_business_role(m.agency_id,m.user_id,m.role) in ('RECRUITER','RECRUITMENT_MANAGER')
+      order by coalesce(u.display_name,u.email) limit 100
+    ) x),'[]'::jsonb),
+    'accountManagers',coalesce((select jsonb_agg(jsonb_build_object('id',x.user_id,'name',x.name) order by x.name) from (
+      select m.user_id,coalesce(u.display_name,u.email) name
+      from public.agency_memberships m join public.users u on u.id=m.user_id
+      where m.agency_id=v_agency and private.xzrecruiter_business_role(m.agency_id,m.user_id,m.role)='ACCOUNT_MANAGER'
+      order by coalesce(u.display_name,u.email) limit 100
+    ) x),'[]'::jsonb),
+    'sources',coalesce((select jsonb_agg(x.source order by x.source) from (
+      select distinct upper(coalesce(a.source_type,a.metadata->>'source','UNKNOWN')) source
+      from public.applications a where a.agency_id=v_agency and a.archived_at is null
+      order by 1 limit 50
+    ) x),'[]'::jsonb)
+  ) into v_filters;
+
   return jsonb_build_object('ok',true,'role',v_role,'timezone',v_tz,'businessDate',v_day,'today',v_today,
     'requirements',v_requirements,'recruiters',v_recruiters,'exceptions',v_exceptions,'amControl',v_am,
-    'interviews',v_interviews,'offers',v_offers,'joinings',v_joinings,'refreshedAt',now());
+    'interviews',v_interviews,'offers',v_offers,'joinings',v_joinings,'filterOptions',v_filters,'refreshedAt',now());
 end;
 $$;
 revoke all on function public.xzrecruiter_step8_manager_control_center(text,integer) from public,anon,authenticated;
