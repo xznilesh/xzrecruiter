@@ -49,7 +49,16 @@
     "test:step7:ai-jobs": "node scripts/step7-security-ai-jobs-tests.mjs",
     "test:step7:performance": "node scripts/step7-security-performance-tests.mjs",
     "test:step7:live": "node scripts/step7-security-live-db.mjs",
-    "test:step7": "npm run test:step7:api && npm run test:step7:database && npm run test:step7:files && npm run test:step7:secrets && npm run test:step7:concurrency && npm run test:step7:web && npm run test:step7:rbac && npm run test:step7:ai-jobs && npm run test:step7:performance"
+    "test:step7": "npm run test:step7:api && npm run test:step7:database && npm run test:step7:files && npm run test:step7:secrets && npm run test:step7:concurrency && npm run test:step7:web && npm run test:step7:rbac && npm run test:step7:ai-jobs && npm run test:step7:performance",
+    "test:step8:static": "node scripts/step8-manager-static-check.mjs",
+    "test:step8:unit": "node scripts/step8-manager-unit-tests.mjs",
+    "test:step8:integration": "node scripts/step8-manager-integration-tests.mjs",
+    "test:step8:e2e": "node scripts/step8-manager-e2e-tests.mjs",
+    "test:step8:security": "node scripts/step8-manager-security-tests.mjs",
+    "test:step8:concurrency": "node scripts/step8-manager-concurrency-tests.mjs",
+    "test:step8:performance": "node scripts/step8-manager-performance-tests.mjs",
+    "test:step8:responsive": "node scripts/step8-manager-responsive-tests.mjs",
+    "test:step8": "npm run test:step8:static && npm run test:step8:unit && npm run test:step8:integration && npm run test:step8:e2e && npm run test:step8:security && npm run test:step8:concurrency && npm run test:step8:performance && npm run test:step8:responsive"
   },
   "dependencies": {
     "mammoth": "1.12.3",
