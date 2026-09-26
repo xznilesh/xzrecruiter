@@ -1160,6 +1160,7 @@ language plpgsql security definer
 set search_path='public','private','pg_temp'
 as $$
 declare v_agency uuid;v_user uuid;v_membership text;v_role text;v_action text:=upper(coalesce(p_action,''));v_job uuid;v_recruiter uuid;v_task uuid;v_priority text;v_status text;
+  v_job_status text;v_requirement_state text;v_recruiter_ready boolean;v_approved_brief uuid;
 begin
   select agency_id,user_id,role into v_agency,v_user,v_membership from private.xzrecruiter_session_context(p_token);
   if v_agency is null then return jsonb_build_object('ok',false,'error','unauthorized'); end if;
@@ -1169,7 +1170,20 @@ begin
     return jsonb_build_object('ok',false,'error','forbidden');
   end if;
   begin v_job:=nullif(p_payload->>'jobId','')::uuid; exception when others then v_job:=null; end;
-  if v_job is null or not exists(select 1 from public.recruitment_jobs where id=v_job and agency_id=v_agency and archived_at is null) then return jsonb_build_object('ok',false,'error','job_not_found'); end if;
+  if v_job is null then return jsonb_build_object('ok',false,'error','job_not_found'); end if;
+  select status,requirement_state,recruiter_ready,approved_hiring_brief_id
+  into v_job_status,v_requirement_state,v_recruiter_ready,v_approved_brief
+  from public.recruitment_jobs
+  where id=v_job and agency_id=v_agency and archived_at is null;
+  if not found then return jsonb_build_object('ok',false,'error','job_not_found'); end if;
+
+  if v_action in ('SET_PRIORITY','ASSIGN_RECRUITER','SET_RECRUITER_TARGET','CREATE_MANAGER_TASK','ACKNOWLEDGE_BLOCKER')
+     and not (
+       coalesce(v_recruiter_ready,false)=true and v_requirement_state='OPEN' and v_approved_brief is not null
+       and upper(coalesce(v_job_status,'OPEN')) in ('OPEN','ON_HOLD')
+     ) then
+    return jsonb_build_object('ok',false,'error','requirement_not_operational');
+  end if;
 
   if v_action='SET_PRIORITY' then
     v_priority:=upper(coalesce(p_payload->>'priority',''));
@@ -1177,9 +1191,17 @@ begin
     update public.recruitment_jobs set priority=v_priority,updated_at=now() where id=v_job and agency_id=v_agency;
     perform private.xzrecruiter_log_activity(v_agency,v_user,'job',v_job,'requirement.priority_changed','Manager changed requirement priority',jsonb_build_object('priority',v_priority));
   elsif v_action='HOLD_REQUIREMENT' then
+    if not (
+      coalesce(v_recruiter_ready,false)=true and v_requirement_state='OPEN' and v_approved_brief is not null
+      and upper(coalesce(v_job_status,'OPEN'))='OPEN'
+    ) then return jsonb_build_object('ok',false,'error','invalid_requirement_transition'); end if;
     update public.recruitment_jobs set status='ON_HOLD',updated_at=now() where id=v_job and agency_id=v_agency;
     perform private.xzrecruiter_log_activity(v_agency,v_user,'job',v_job,'requirement.held','Manager placed requirement on hold',jsonb_build_object('reason',left(coalesce(p_payload->>'reason',''),1000)));
   elsif v_action='REOPEN_REQUIREMENT' then
+    if not (
+      coalesce(v_recruiter_ready,false)=true and v_requirement_state='OPEN' and v_approved_brief is not null
+      and upper(coalesce(v_job_status,''))='ON_HOLD'
+    ) then return jsonb_build_object('ok',false,'error','invalid_requirement_transition'); end if;
     update public.recruitment_jobs set status='OPEN',updated_at=now() where id=v_job and agency_id=v_agency;
     perform private.xzrecruiter_log_activity(v_agency,v_user,'job',v_job,'requirement.reopened','Manager reopened requirement','{}'::jsonb);
   elsif v_action='ASSIGN_RECRUITER' then
