@@ -11,7 +11,7 @@ function exists(file){if(!fs.existsSync(file))throw new Error(`missing ${file}`)
  'app/api/crm/route.js','lib/crm.js','app/step5.css'
 ].forEach(exists);
 
-must('lib/crm.js',['xzrecruiter_crm_reference_context','xzrecruiter_crm_search','xzrecruiter_save_client','xzrecruiter_save_contact','xzrecruiter_save_opportunity','xzrecruiter_move_opportunity_stage','xzrecruiter_save_crm_task','xzrecruiter_save_client_contract','xzrecruiter_save_crm_custom_values']);
+must('lib/crm.js',['xzrecruiter_crm_dispatch','getCrmReferenceContext','getCrmSearch','saveClient','saveContact','saveOpportunity','moveOpportunity','saveTask','saveContract','saveCustomValues']);
 must('app/components/Client360Drawer.js',['Client 360','Business opportunities','Commercial terms','Placement revenue','Relationship timeline']);
 must('app/components/CrmWorkspace.js',['Server-side search','saveSavedView','OPPORTUNITY','CONTACT','CLIENT']);
 must('app/components/CrmCustomFieldsPanel.js',['Workspace-defined business data','saveCustomValues','MULTI_SELECT','SINGLE_SELECT']);

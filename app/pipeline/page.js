@@ -1,12 +1,14 @@
 import AppShell from '@/app/components/AppShell';
 import PipelineWorkspace from '@/app/components/PipelineWorkspace';
 import { requireReadyWorkspace } from '@/lib/workspace-ready';
+import { redirectRecruiterFromLegacyWorkspace } from '@/lib/recruiter-access';
 import { getAtsContext } from '@/lib/ats';
 
 export const dynamic='force-dynamic';
 
 export default async function PipelinePage(){
   const {user,globalContext}=await requireReadyWorkspace();
+  await redirectRecruiterFromLegacyWorkspace();
   const [context,candidateContext,jobContext]=await Promise.all([
     getAtsContext('PIPELINE','',100,0),
     getAtsContext('CANDIDATES','',100,0),

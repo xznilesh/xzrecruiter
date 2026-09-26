@@ -1,11 +1,11 @@
 name: XZRecruiter production verification
 on:
   push:
-    branches: [production-rebuild-v1, main, step2-global-foundation, step3-agency-onboarding, step4-global-enterprise-ats, step4-closeout-stage-guard, step4-closeout-public-apply, step4-final-quality, step5-recruitment-crm, step5-ai-assisted-human-screening]
+    branches: [main, step9-production-qa-launch-readiness, step7-canonical-security-foundation, step8-automation-real-time-manager-control-v2]
   pull_request:
-    branches: [main, step2-global-foundation, step3-agency-onboarding, step4-global-enterprise-ats]
+    branches: [main]
 jobs:
-  build:
+  source_quality:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,9 +14,34 @@ jobs:
           node-version: 22
       - run: npm install --no-audit --no-fund
       - run: npm run lint
+      - run: npm audit --omit=dev --audit-level=high
       - run: npm run typecheck
+      - run: npm run test:step1:contract
+      - run: npm run test:step1:security
+      - run: npm run check:step2:jd:syntax
+      - run: npm run test:step2:jd:unit
+      - run: npm run test:step2:jd:integration
+      - run: npm run test:step2:jd:e2e
+      - run: npm run test:step2:jd:security
+      - run: npm run test:step2:jd:regression
       - run: npm run test:step2
+      - run: npm run check:step3:execution:syntax
+      - run: npm run test:step3:execution:unit
+      - run: npm run test:step3:execution:integration
+      - run: npm run test:step3:execution:e2e
+      - run: npm run test:step3:execution:security
+      - run: npm run test:step3:execution:performance
+      - run: npm run test:step3:execution:responsive
       - run: npm run test:step3
+      - run: npm run check:step4:candidate:syntax
+      - run: npm run test:step4:candidate:unit
+      - run: npm run test:step4:candidate:integration
+      - run: npm run test:step4:candidate:e2e
+      - run: npm run test:step4:candidate:regression
+      - run: npm run test:step4:candidate:security
+      - run: npm run test:step4:candidate:concurrency
+      - run: npm run test:step4:candidate:performance
+      - run: npm run test:step4:candidate:responsive
       - run: npm run test:step4
       - run: npm run test:step4:closeout
       - run: npm run test:step4:performance
@@ -29,6 +54,10 @@ jobs:
       - run: npm run test:step5:portals
       - run: npm run test:step5:performance
       - run: npm run test:step5:screening
+      - run: npm run test:step6
+      - run: npm run test:step7
+      - run: npm run test:step8
+      - run: npm run test:step9
       - run: npm run build
         env:
           DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/postgres

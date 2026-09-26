@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { mutationRequestIsTrusted,declaredBodyWithin } from '@/lib/request-security';
 import { crmAction } from '@/lib/crm';
 
 function sameOrigin(req){const origin=req.headers.get('origin');return !origin||origin===req.nextUrl.origin;}
@@ -11,7 +12,8 @@ function statusFor(error){
   return 400;
 }
 export async function POST(req){
-  if(!sameOrigin(req))return NextResponse.json({error:'Invalid origin.'},{status:403});
+  if(!sameOrigin(req)||!mutationRequestIsTrusted(req))return NextResponse.json({error:'Invalid origin.'},{status:403});
+  if(!declaredBodyWithin(req,1048576))return NextResponse.json({error:'request_too_large'},{status:413});
   let body;try{body=await req.json();}catch{return NextResponse.json({error:'Invalid request.'},{status:400});}
   try{const result=await crmAction(String(body.action||''),body.payload||{});if(!result?.ok)return NextResponse.json(result||{error:'Action failed.'},{status:statusFor(result?.error)});return NextResponse.json(result);}
   catch(error){console.error('crm_action_failed',body?.action,error?.message||'');return NextResponse.json({error:'Business workspace action is temporarily unavailable.'},{status:503});}

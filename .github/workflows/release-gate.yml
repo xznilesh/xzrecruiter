@@ -1,0 +1,29 @@
+name: XZRecruiter Step 9 release gate
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+jobs:
+  release_gate:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npm run test:step9
+      - run: npm run build
+        env:
+          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/postgres
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run test:step9:release
+        env:
+          XZRECRUITER_RELEASE_BASE_URL: https://xzrecruiter.vercel.app
+          XZRECRUITER_DATABASE_URL: ${{ secrets.XZRECRUITER_DATABASE_URL }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          XZRECRUITER_BACKUP_RESTORE_EVIDENCE: ${{ vars.XZRECRUITER_BACKUP_RESTORE_EVIDENCE }}
+          XZRECRUITER_BROWSER_E2E_EVIDENCE: ${{ vars.XZRECRUITER_BROWSER_E2E_EVIDENCE }}
+          XZRECRUITER_PILOT_EVIDENCE: ${{ vars.XZRECRUITER_PILOT_EVIDENCE }}
