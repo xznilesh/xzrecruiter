@@ -112,7 +112,7 @@ create or replace function private.xzrecruiter_step8_alert_condition_holds(
 ) returns boolean
 language plpgsql stable security definer
 set search_path='public','private','pg_temp'
-as $
+as $alert$
 declare
   v_alert public.automation_alerts%rowtype;v_cfg public.automation_control_configs%rowtype;
   v_tz text;v_day date;v_start timestamptz;v_end timestamptz;v_cutoff timestamptz;v_hours_cutoff numeric;
@@ -226,7 +226,7 @@ begin
   end if;
   return false;
 end;
-$;
+$alert$;
 revoke all on function private.xzrecruiter_step8_alert_condition_holds(uuid,uuid) from public,anon,authenticated;
 
 create or replace function private.xzrecruiter_step8_run_agency(
@@ -678,7 +678,7 @@ create or replace function public.xzrecruiter_run_step8_pending_events(
 ) returns jsonb
 language plpgsql security definer
 set search_path='public','private','pg_temp'
-as $
+as $events$
 declare v_row record;v_result jsonb;v_results jsonb:='[]'::jsonb;v_processed integer:=0;v_failed integer:=0;
 begin
   for v_row in
@@ -713,7 +713,7 @@ begin
   end loop;
   return jsonb_build_object('ok',true,'processedTenants',v_processed,'failedTenants',v_failed,'tenants',v_results);
 end;
-$;
+$events$;
 revoke all on function public.xzrecruiter_run_step8_pending_events(text,integer) from public,anon,authenticated;
 grant execute on function public.xzrecruiter_run_step8_pending_events(text,integer) to service_role;
 
