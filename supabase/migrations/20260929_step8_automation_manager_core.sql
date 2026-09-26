@@ -291,7 +291,7 @@ as $$
       'requirement:create','requirement:approve','requirement:assign',
       'candidate:view','submission:am_review','submission:client_submit',
       'commercial:view','commercial:edit','document:resume_view','document:sensitive_view','document:review','audit:view',
-      'manager:view','automation:ack'
+      'automation:ack'
     ])
     when 'RECRUITER' then lower(p_permission)=any(array[
       'candidate:view','candidate:edit','candidate:screen','submission:create',
