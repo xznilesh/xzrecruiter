@@ -17,7 +17,7 @@ assert.ok(requirement.includes('setInterval(()=>refresh({silent:true}),30000)'),
 assert.ok(notifications.includes('setInterval(()=>refresh({silent:true}),30000)'),'notification center refresh missing');
 
 for(const ui of [manager,requirement,notifications]){
-  assert.ok(ui.includes("role="status"")||ui.includes('role="status"')||ui.includes("role={'status'}"),'loading/error success feedback must remain accessible');
+  assert.ok(ui.includes('role="status"')||ui.includes("role={'status'}"),'loading/error success feedback must remain accessible');
 }
 assert.ok(manager.includes('No open manager exceptions.')&&manager.includes('No active requirements.'),'manager empty states missing');
 assert.ok(requirement.includes('No active recruiter assignment.')&&requirement.includes('No open exceptions.'),'requirement empty states missing');
