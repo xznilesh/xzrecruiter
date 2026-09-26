@@ -141,8 +141,24 @@ begin
       j.owner_user_id,j.updated_at,j.client_id,
       exists(select 1 from public.requirement_recruiter_assignments ra where ra.agency_id=p_agency and ra.job_id=j.id and ra.assignment_status='ACTIVE' and ra.blocker_reason is not null) explicit_blocker
     from public.recruitment_jobs j
-    where j.agency_id=p_agency and j.archived_at is null and upper(coalesce(j.status,'OPEN'))='OPEN'
+    where j.agency_id=p_agency and j.archived_at is null and upper(coalesce(j.status,'OPEN')) in ('OPEN','ON_HOLD')
   loop
+    if upper(coalesce(v_job.status,'OPEN'))='ON_HOLD' then
+      v_reasons:=jsonb_build_array('REQUIREMENT_ON_HOLD');
+      v_actions:='[]'::jsonb;
+      v_fp:=md5('ON_HOLD|'||v_job.id::text||'|'||coalesce(v_job.updated_at::text,''));
+      select health_status into v_old_health from public.requirement_health_current where agency_id=p_agency and job_id=v_job.id;
+      insert into public.requirement_health_current(agency_id,job_id,health_status,reason_codes,facts,next_actions,source_fingerprint)
+      values(p_agency,v_job.id,'ON_HOLD',v_reasons,jsonb_build_object('dailyTarget',0,'validSubmissionsToday',0,'remainingTarget',0,'pipelineCount',0),v_actions,v_fp)
+      on conflict(agency_id,job_id) do update set health_status='ON_HOLD',reason_codes=excluded.reason_codes,
+        facts=excluded.facts,next_actions=excluded.next_actions,source_fingerprint=excluded.source_fingerprint,computed_at=now();
+      if v_old_health is distinct from 'ON_HOLD' then
+        perform private.xzrecruiter_log_activity(p_agency,null,'job',v_job.id,'requirement.health_changed',
+          'Requirement health changed to ON HOLD',jsonb_build_object('from',v_old_health,'to','ON_HOLD','reason_codes',v_reasons));
+      end if;
+      continue;
+    end if;
+
     v_target:=greatest(coalesce(v_job.submission_target_daily,0),0);
     select count(distinct cs.application_id)::integer into v_valid
     from public.candidate_submissions cs
@@ -861,24 +877,37 @@ begin
   elsif v_action='ASSIGN_RECRUITER' then
     begin v_recruiter:=(p_payload->>'recruiterUserId')::uuid; exception when others then return jsonb_build_object('ok',false,'error','invalid_recruiter'); end;
     if not exists(select 1 from public.agency_memberships m where m.agency_id=v_agency and m.user_id=v_recruiter and private.xzrecruiter_business_role(m.agency_id,m.user_id,m.role) in ('RECRUITER','RECRUITMENT_MANAGER')) then return jsonb_build_object('ok',false,'error','invalid_recruiter'); end if;
+    if coalesce((p_payload->>'dailyTarget')::integer,0) not between 0 and 1000 or coalesce((p_payload->>'totalTarget')::integer,0) not between 0 and 10000 then
+      return jsonb_build_object('ok',false,'error','invalid_target');
+    end if;
+    v_priority:=upper(coalesce(nullif(p_payload->>'priority',''),'NORMAL'));
+    if v_priority not in ('LOW','NORMAL','HIGH','URGENT') then return jsonb_build_object('ok',false,'error','invalid_priority'); end if;
     insert into public.requirement_recruiter_assignments(agency_id,job_id,recruiter_user_id,assignment_status,daily_submission_target,total_submission_target,manager_priority,priority_context,manager_instructions,assigned_by_user_id)
     values(v_agency,v_job,v_recruiter,'ACTIVE',greatest(coalesce((p_payload->>'dailyTarget')::integer,0),0),greatest(coalesce((p_payload->>'totalTarget')::integer,0),0),
-      upper(coalesce(nullif(p_payload->>'priority',''),'NORMAL')),nullif(left(p_payload->>'context',500),''),nullif(left(p_payload->>'instructions',2000),''),v_user)
+      v_priority,nullif(left(p_payload->>'context',500),''),nullif(left(p_payload->>'instructions',2000),''),v_user)
     on conflict(agency_id,job_id,recruiter_user_id) do update set assignment_status='ACTIVE',daily_submission_target=excluded.daily_submission_target,total_submission_target=excluded.total_submission_target,manager_priority=excluded.manager_priority,priority_context=excluded.priority_context,manager_instructions=excluded.manager_instructions,assigned_by_user_id=v_user,updated_at=now();
     perform private.xzrecruiter_log_activity(v_agency,v_user,'job',v_job,'requirement.recruiter_assigned','Manager assigned recruiter',jsonb_build_object('recruiter_user_id',v_recruiter));
   elsif v_action='SET_RECRUITER_TARGET' then
     begin v_recruiter:=(p_payload->>'recruiterUserId')::uuid; exception when others then return jsonb_build_object('ok',false,'error','invalid_recruiter'); end;
-    update public.requirement_recruiter_assignments set daily_submission_target=greatest(coalesce((p_payload->>'dailyTarget')::integer,0),0),total_submission_target=greatest(coalesce((p_payload->>'totalTarget')::integer,0),0),updated_at=now()
+    if coalesce((p_payload->>'dailyTarget')::integer,0) not between 0 and 1000 or coalesce((p_payload->>'totalTarget')::integer,0) not between 0 and 10000 then
+      return jsonb_build_object('ok',false,'error','invalid_target');
+    end if;
+    update public.requirement_recruiter_assignments set daily_submission_target=coalesce((p_payload->>'dailyTarget')::integer,0),total_submission_target=coalesce((p_payload->>'totalTarget')::integer,0),updated_at=now()
     where agency_id=v_agency and job_id=v_job and recruiter_user_id=v_recruiter and assignment_status='ACTIVE';
     if not found then return jsonb_build_object('ok',false,'error','assignment_not_found'); end if;
     perform private.xzrecruiter_log_activity(v_agency,v_user,'job',v_job,'requirement.target_changed','Manager changed recruiter target',jsonb_build_object('recruiter_user_id',v_recruiter,'daily_target',p_payload->>'dailyTarget','total_target',p_payload->>'totalTarget'));
   elsif v_action='CREATE_MANAGER_TASK' then
     begin v_recruiter:=nullif(p_payload->>'assignedUserId','')::uuid; exception when others then v_recruiter:=null; end;
     if v_recruiter is not null and not exists(select 1 from public.agency_memberships where agency_id=v_agency and user_id=v_recruiter) then return jsonb_build_object('ok',false,'error','invalid_assignee'); end if;
-    insert into public.crm_tasks(agency_id,title,description,status,priority,due_at,assigned_user_id,created_by_user_id,job_id,task_type)
+    insert into public.crm_tasks(agency_id,title,description,status,priority,due_at,assigned_user_id,created_by_user_id,job_id,task_type,automation_key)
     values(v_agency,left(coalesce(p_payload->>'title','Manager action'),500),left(coalesce(p_payload->>'description',''),2000),'OPEN',
       case when upper(coalesce(p_payload->>'priority','NORMAL')) in ('LOW','NORMAL','HIGH','URGENT') then upper(coalesce(p_payload->>'priority','NORMAL')) else 'NORMAL' end,
-      nullif(p_payload->>'dueAt','')::timestamptz,v_recruiter,v_user,v_job,'MANAGER_CLARIFICATION') returning id into v_task;
+      nullif(p_payload->>'dueAt','')::timestamptz,v_recruiter,v_user,v_job,'MANAGER_CLARIFICATION',
+      case when nullif(p_payload->>'idempotencyKey','') is null then null else 'manager:'||left(p_payload->>'idempotencyKey',160) end)
+    on conflict(agency_id,automation_key) where automation_key is not null and archived_at is null
+    do update set title=excluded.title,description=excluded.description,priority=excluded.priority,due_at=excluded.due_at,
+      assigned_user_id=excluded.assigned_user_id,updated_at=now()
+    returning id into v_task;
     perform private.xzrecruiter_log_activity(v_agency,v_user,'job',v_job,'manager.task_created','Manager created execution task',jsonb_build_object('task_id',v_task,'assigned_user_id',v_recruiter));
     return jsonb_build_object('ok',true,'taskId',v_task);
   elsif v_action='ACKNOWLEDGE_BLOCKER' then
