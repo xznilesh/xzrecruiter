@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { safeRequestId } from '@/lib/request-security';
+import { mutationRequestIsTrusted,safeRequestId } from '@/lib/request-security';
 import { serviceRpc,serviceRpcConfigured } from '@/lib/server-rpc';
 
 export const runtime='nodejs';
@@ -13,6 +13,7 @@ function authorized(req){
 }
 async function run(req){
   const requestId=safeRequestId(req);
+  if(!mutationRequestIsTrusted(req))return NextResponse.json({ok:false,error:'invalid_request_origin',requestId},{status:403});
   if(!authorized(req))return NextResponse.json({ok:false,error:'unauthorized',requestId},{status:401});
   if(!serviceRpcConfigured())return NextResponse.json({ok:false,error:'service_rpc_not_configured',requestId},{status:503});
   try{
