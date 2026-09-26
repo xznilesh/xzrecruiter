@@ -13,7 +13,7 @@ assert.ok(sql.includes("pg_advisory_xact_lock(hashtext('xzr-step8-'||p_agency::t
 assert.ok(sql.includes("pg_try_advisory_xact_lock(hashtext('xzr-step8-event-'||v_row.agency_id::text))"),'event-worker tenant lock missing');
 assert.ok(sql.includes('on conflict(source_activity_event_id) do nothing'),'event outbox replay must be idempotent');
 assert.ok(sql.includes('on conflict(agency_id,automation_key)'),'manager/automation task retry must be idempotent');
-assert.ok(sql.includes('on conflict(agency_id,dedupe_key)'),'alert retry must preserve one canonical alert');
+assert.ok(core.includes('unique(agency_id,dedupe_key)')&&sql.includes("pg_advisory_xact_lock(hashtext('xzr-step8-'||p_agency::text))"),'alert retry must preserve one canonical alert under tenant serialization');
 assert.ok(sql.includes('last_detected_run_id is distinct from v_run')&&sql.includes('step8_alert_condition_holds'),'bounded scan must not resolve unseen-but-still-active issue');
 assert.ok(sql.includes("event_status=case when attempt_count>=5 then 'FAILED' else 'PENDING' end"),'event retry ceiling missing');
 assert.ok(sql.includes("'xzrecruiter-step8-events'")&&sql.includes("'xzrecruiter-step8-full-reconcile'"),'scheduled catch-up/reconciliation missing');
