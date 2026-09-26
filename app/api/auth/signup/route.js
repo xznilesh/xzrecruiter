@@ -23,8 +23,11 @@ export async function POST(req){
       scope:'auth:signup',identity:rateLimitIdentityForRequest(req,email),limit:5,windowSeconds:3600
     });
     if(!gate.allowed)return NextResponse.json({error:'Too many signup attempts. Try again later.',code:'rate_limited'},{status:429});
-  }catch{
-    return NextResponse.json({error:messages.signup_failed},{status:503});
+  }catch(error){
+    // The signup RPC enforces a database-side per-email throttle as the
+    // final abuse-control boundary. Infrastructure rate limiting is an
+    // additional layer and must not make account creation unavailable.
+    console.warn('signup_edge_rate_limit_unavailable',error?.message||'');
   }
 
   try{
