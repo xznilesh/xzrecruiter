@@ -25,8 +25,10 @@ for(const op of ['STEP6_GENERATE','STEP6_SEND','STEP6_AM','STEP6_CLIENT']){
 assert.ok(step6.includes('stale_submission_version'),'stale submission writes must be rejected');
 assert.ok(step6.includes('duplicate_client_submission'),'duplicate client submission guard missing');
 
-assert.ok((step7.match(/pg_advisory_xact_lock/g)||[]).length>=3,'Step-7 wrappers must preserve/strengthen critical locks');
+const step7Locks=(step7.match(/pg_advisory_xact_lock/g)||[]).length;
+assert.ok(step7Locks>=3,'Step-7 wrappers must preserve/strengthen critical locks');
+assert.ok(step7.includes('candidate.export_rate_limited'),'bulk/export retry abuse must be security controlled');
 assert.ok(step7.includes("membership.role_changed")&&step7.includes("sessions_revoked"),'membership changes must invalidate sessions');
 assert.ok(step7.includes("submission.client_submitted")&&step7.includes("candidate.export_rate_limited"),'critical mutation/security events missing');
 
-console.log('STEP7_CONCURRENCY_SECURITY_PASS candidate_dedupe=true application_dedupe=true screening=true submissions=true membership_revocation=true idempotency=true');
+console.log('STEP7_CONCURRENCY_SECURITY_PASS candidate_dedupe=true application_dedupe=true screening=true submissions=true membership_revocation=true idempotency=true locks='+step7Locks);
