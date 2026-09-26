@@ -57,6 +57,7 @@ export default function ManagerRequirementControl({jobId,initialContext}){
     setTask(x=>({...x,title:'',description:''}));
   }
 
+  const canControl=['OWNER','ADMIN','RECRUITMENT_MANAGER'].includes(String(ctx.role||''));
   const job=ctx.job||{},health=ctx.health||{},pipeline=ctx.pipeline||{};
   const assignments=list(ctx.assignments),alerts=list(ctx.exceptions),activity=list(ctx.activity),eligible=list(ctx.eligibleRecruiters);
   const reasons=list(health.reason_codes),actions=list(health.next_actions);
@@ -76,7 +77,7 @@ export default function ManagerRequirementControl({jobId,initialContext}){
       <div><span>Status</span><b>{pretty(job.status)}</b></div>
     </section>
 
-    <div className="mc-grid two">
+    {canControl?<div className="mc-grid two">
       <section className="mc-card">
         <div className="mc-section-title"><div><span className="page-kicker">Why this health</span><h2>{pretty(health.health_status||'HEALTHY')}</h2></div></div>
         <div className="mc-reasons">{reasons.length?reasons.map(x=><span key={x}>{pretty(x)}</span>):<span>No active health reason</span>}</div>
@@ -106,7 +107,7 @@ export default function ManagerRequirementControl({jobId,initialContext}){
         <div><span>Today</span><b>{n(a.submissions_today)}/{n(a.daily_submission_target)}</b><small>{n(a.remaining_target)} remaining · {n(a.achievement_percent)}%</small></div>
         <div><span>Pipeline</span><b>{n(a.pipeline)}</b></div>
         <div><span>Overdue</span><b>{n(a.due_actions)}</b></div>
-        <div className="mc-row-actions"><button onClick={()=>managerAction('SET_RECRUITER_TARGET',{recruiterUserId:a.recruiter_user_id,dailyTarget:a.daily_submission_target,totalTarget:a.total_submission_target})}>Re-save target</button>{a.blocker_reason?<button onClick={()=>managerAction('ACKNOWLEDGE_BLOCKER',{recruiterUserId:a.recruiter_user_id})}>Acknowledge blocker</button>:null}</div>
+        {canControl?<div className="mc-row-actions"><button onClick={()=>managerAction('SET_RECRUITER_TARGET',{recruiterUserId:a.recruiter_user_id,dailyTarget:a.daily_submission_target,totalTarget:a.total_submission_target})}>Re-save target</button>{a.blocker_reason?<button onClick={()=>managerAction('ACKNOWLEDGE_BLOCKER',{recruiterUserId:a.recruiter_user_id})}>Acknowledge blocker</button>:null}</div>:null}
         {a.blocker_reason?<p className="mc-blocker">Blocked: {a.blocker_reason}</p>:null}
       </article>)}</div>:<div className="ats-empty">No active recruiter assignment.</div>}
     </section>
@@ -133,9 +134,9 @@ export default function ManagerRequirementControl({jobId,initialContext}){
           <button disabled={!assign.recruiterUserId} onClick={()=>managerAction('ASSIGN_RECRUITER',assign)}>Save assignment</button>
         </div>
       </section>
-    </div>
+    </div>:null}
 
-    <section className="mc-card">
+    {canControl?<section className="mc-card">
       <div className="mc-section-title"><div><span className="page-kicker">Request action</span><h2>Create manager task</h2></div></div>
       <div className="mc-form task">
         <label><span>Assignee</span><select value={task.assignedUserId} onChange={e=>setTask({...task,assignedUserId:e.target.value})}><option value="">Unassigned</option>{eligible.map(x=><option key={x.userId} value={x.userId}>{x.name}</option>)}</select></label>
@@ -145,7 +146,7 @@ export default function ManagerRequirementControl({jobId,initialContext}){
         <label className="wide"><span>Context</span><textarea rows="3" value={task.description} onChange={e=>setTask({...task,description:e.target.value})}/></label>
         <button disabled={!task.title.trim()} onClick={createTask}>Create task</button>
       </div>
-    </section>
+    </section>:null}
 
     <section className="mc-card">
       <div className="mc-section-title"><div><span className="page-kicker">Exceptions</span><h2>Open alerts for this requirement</h2></div></div>
