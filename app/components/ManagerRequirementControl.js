@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect,useState } from 'react';
+import { useEffect,useRef,useState } from 'react';
 import Link from 'next/link';
 
 const list=v=>Array.isArray(v)?v:[];
@@ -31,7 +31,7 @@ export default function ManagerRequirementControl({jobId,initialContext}){
   const[priority,setPriority]=useState(initialContext?.job?.priority||'NORMAL');
   const[assign,setAssign]=useState({recruiterUserId:'',dailyTarget:'0',totalTarget:'0',priority:'NORMAL',context:'',instructions:''});
   const[task,setTask]=useState({assignedUserId:'',title:'',description:'',priority:'NORMAL',dueAt:''});
-  const idempotencyRef=useState(()=>uid())[0];
+  const idempotencyRef=useRef(uid());
 
   async function refresh({silent=false}={}){
     if(!silent){setState('loading');setMessage('')}
@@ -53,7 +53,9 @@ export default function ManagerRequirementControl({jobId,initialContext}){
     catch(e){setState('error');setMessage(e.message)}
   }
   async function createTask(){
-    await managerAction('CREATE_MANAGER_TASK',{...task,idempotencyKey:idempotencyRef});
+    const key=idempotencyRef.current;
+    await managerAction('CREATE_MANAGER_TASK',{...task,idempotencyKey:key});
+    idempotencyRef.current=uid();
     setTask(x=>({...x,title:'',description:''}));
   }
 
