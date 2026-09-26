@@ -41,6 +41,7 @@ export default function ManagerControlCenter({initialHome,initialNotifications,i
   const[state,setState]=useState('idle');
   const[message,setMessage]=useState('');
   const[lastRefresh,setLastRefresh]=useState(initialHome?.refreshedAt||null);
+  const[filters,setFilters]=useState({from:'',to:'',clientId:'',jobId:'',recruiterId:'',accountManagerId:'',source:''});
 
   async function refresh({silent=false}={}){
     if(!silent){setState('loading');setMessage('')}
@@ -58,6 +59,15 @@ export default function ManagerControlCenter({initialHome,initialNotifications,i
     const timer=setInterval(()=>refresh({silent:true}),30000);
     return()=>clearInterval(timer);
   },[]);
+  async function refreshAnalytics(){
+    setState('loading');setMessage('');
+    try{
+      const qs=new URLSearchParams({mode:'analytics'});
+      for(const [k,v] of Object.entries(filters))if(v)qs.set(k,v);
+      const an=await getJson('/api/manager-control?'+qs.toString());
+      setAnalytics(an);setState('saved');setMessage('Analytics cohort updated.');
+    }catch(e){setState('error');setMessage(e.message)}
+  }
   async function runAutomation(){
     setState('loading');setMessage('');
     try{const r=await post({action:'manualRun'});setMessage(`Automation run complete · detected ${r.detected||0} · resolved ${r.resolved||0}`);await refresh({silent:true});setState('saved')}
@@ -71,6 +81,7 @@ export default function ManagerControlCenter({initialHome,initialNotifications,i
 
   const canControl=['OWNER','ADMIN','RECRUITMENT_MANAGER'].includes(String(home.role||''));
   const t=home.today||{};
+  const options=home.filterOptions||{};
   const reqs=list(home.requirements),recruiters=list(home.recruiters),exceptions=list(home.exceptions);
   const funnel=analytics.funnel||{};
   const maxFunnel=Math.max(1,...['sourced','screened','qualified','internallySubmitted','amApproved','clientSubmitted','interviewed','offered','joined'].map(k=>n(funnel[k])));
@@ -105,6 +116,21 @@ export default function ManagerControlCenter({initialHome,initialNotifications,i
       <Metric label="Interviews today" value={n(t.interviewsToday)}/>
       <Metric label="Offer actions" value={n(t.offersRequiringAction)}/>
       <Metric label="Joining actions" value={n(t.joiningsRequiringAction)}/>
+    </section>
+
+    <section className="mc-card">
+      <div className="mc-section-title"><div><span className="page-kicker">Cohort filters</span><h2>Funnel & source analysis</h2></div><button className="ghost-action" onClick={refreshAnalytics} disabled={state==='loading'}>Apply filters</button></div>
+      <div className="mc-filter-form">
+        <label><span>From</span><input type="date" value={filters.from} onChange={e=>setFilters({...filters,from:e.target.value})}/></label>
+        <label><span>To</span><input type="date" value={filters.to} onChange={e=>setFilters({...filters,to:e.target.value})}/></label>
+        <label><span>Client</span><select value={filters.clientId} onChange={e=>setFilters({...filters,clientId:e.target.value})}><option value="">All clients</option>{list(options.clients).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+        <label><span>Requirement</span><select value={filters.jobId} onChange={e=>setFilters({...filters,jobId:e.target.value})}><option value="">All requirements</option>{list(options.requirements).map(x=><option key={x.id} value={x.id}>{x.title}</option>)}</select></label>
+        <label><span>Recruiter</span><select value={filters.recruiterId} onChange={e=>setFilters({...filters,recruiterId:e.target.value})}><option value="">All recruiters</option>{list(options.recruiters).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+        <label><span>Account Manager</span><select value={filters.accountManagerId} onChange={e=>setFilters({...filters,accountManagerId:e.target.value})}><option value="">All AMs</option>{list(options.accountManagers).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+        <label><span>Source</span><select value={filters.source} onChange={e=>setFilters({...filters,source:e.target.value})}><option value="">All sources</option>{list(options.sources).map(x=><option key={x} value={x}>{pretty(x)}</option>)}</select></label>
+        <button onClick={()=>{setFilters({from:'',to:'',clientId:'',jobId:'',recruiterId:'',accountManagerId:'',source:''});setTimeout(()=>refresh({silent:true}),0)}}>Reset</button>
+      </div>
+      <p className="mc-muted">Cohort definition: applications created inside the selected time window. Stage outcomes are measured for that same cohort.</p>
     </section>
 
     <div className="mc-grid two">
