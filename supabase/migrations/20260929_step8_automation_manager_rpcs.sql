@@ -184,12 +184,14 @@ begin
     return exists(
       select 1 from public.candidate_submissions s
       where s.agency_id=p_agency and s.id=v_alert.entity_id and s.workflow_status='INTERNAL_SUBMITTED'
+        and s.invalidated_at is null and s.withdrawn_at is null
         and coalesce(s.internal_submitted_at,s.updated_at)<now()-make_interval(hours=>v_cfg.am_review_attention_hours)
     );
   elsif v_alert.rule_code='CLIENT_FEEDBACK_OVERDUE' then
     return exists(
       select 1 from public.candidate_submissions s
       where s.agency_id=p_agency and s.id=v_alert.entity_id and s.workflow_status='CLIENT_SUBMITTED'
+        and s.invalidated_at is null and s.withdrawn_at is null
         and s.client_submitted_at<now()-make_interval(hours=>v_cfg.client_feedback_attention_hours)
         and not exists(
           select 1 from public.recruitment_activity_events e
@@ -504,6 +506,7 @@ begin
     from public.candidate_submissions s
     join public.candidates c on c.id=s.candidate_id and c.agency_id=p_agency
     where s.agency_id=p_agency and s.workflow_status='INTERNAL_SUBMITTED'
+      and s.invalidated_at is null and s.withdrawn_at is null
       and coalesce(s.internal_submitted_at,s.updated_at)<now()-make_interval(hours=>v_cfg.am_review_attention_hours)
     order by coalesce(s.internal_submitted_at,s.updated_at) limit 300
   loop
@@ -529,6 +532,7 @@ begin
     from public.candidate_submissions s
     join public.candidates c on c.id=s.candidate_id and c.agency_id=p_agency
     where s.agency_id=p_agency and s.workflow_status='CLIENT_SUBMITTED'
+      and s.invalidated_at is null and s.withdrawn_at is null
       and s.client_submitted_at<now()-make_interval(hours=>v_cfg.client_feedback_attention_hours)
       and not exists(select 1 from public.recruitment_activity_events e where e.agency_id=p_agency and e.entity_type='application' and e.entity_id=s.application_id and e.action='client.feedback_received' and e.occurred_at>=s.client_submitted_at)
     order by s.client_submitted_at limit 300
@@ -616,20 +620,20 @@ begin
     );v_detected:=v_detected+1;
   end loop;
 
-  -- Resolve alerts not reproduced by this full-tenant run and close their automation-created tasks.
+  -- Resolve alerts not reproduced by this full-tenant run and emit exactly one immutable RESOLVED event per row.
   with resolved as (
     update public.automation_alerts a set lifecycle='RESOLVED',resolved_at=now(),resolution_reason='UNDERLYING_CONDITION_CLEARED'
     where a.agency_id=p_agency and a.lifecycle in ('OPEN','ACKNOWLEDGED','DISMISSED')
       and a.last_detected_run_id is distinct from v_run
       and not private.xzrecruiter_step8_alert_condition_holds(p_agency,a.id)
-    returning a.id,a.dedupe_key
+    returning a.id
+  ), logged as (
+    insert into public.automation_alert_events(agency_id,alert_id,event_type,metadata)
+    select p_agency,r.id,'RESOLVED',jsonb_build_object('run_id',v_run,'reason','UNDERLYING_CONDITION_CLEARED')
+    from resolved r
+    returning alert_id
   )
-  select count(*)::integer into v_resolved from resolved;
-
-  insert into public.automation_alert_events(agency_id,alert_id,event_type,metadata)
-  select p_agency,a.id,'RESOLVED',jsonb_build_object('run_id',v_run,'reason','UNDERLYING_CONDITION_CLEARED')
-  from public.automation_alerts a
-  where a.agency_id=p_agency and a.lifecycle='RESOLVED' and a.resolved_at>=now()-interval '5 seconds';
+  select count(*)::integer into v_resolved from logged;
 
   update public.crm_tasks t set status='DONE',completed_at=coalesce(completed_at,now()),updated_at=now()
   where t.agency_id=p_agency and t.automation_key is not null and t.status in ('OPEN','IN_PROGRESS')
