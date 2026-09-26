@@ -594,6 +594,48 @@ begin
 end
 $do$;
 
+-- Core tenant entity classification foundation.
+do $do$
+declare r record;v_default text;v_constraint text;
+begin
+  for r in
+    select * from (values
+      ('candidates','HIGHLY_SENSITIVE'),
+      ('applications','HIGHLY_SENSITIVE'),
+      ('recruitment_jobs','CONFIDENTIAL'),
+      ('recruitment_clients','CONFIDENTIAL'),
+      ('crm_contacts','CONFIDENTIAL'),
+      ('crm_tasks','INTERNAL'),
+      ('recruitment_activity_events','INTERNAL'),
+      ('interviews','CONFIDENTIAL'),
+      ('offers','CONFIDENTIAL'),
+      ('placements','CONFIDENTIAL'),
+      ('application_screening_summaries','HIGHLY_SENSITIVE'),
+      ('application_screening_overrides','HIGHLY_SENSITIVE'),
+      ('application_match_versions','HIGHLY_SENSITIVE'),
+      ('requirement_ai_runs','CONFIDENTIAL')
+    ) as x(table_name,default_classification)
+  loop
+    if to_regclass('public.'||r.table_name) is not null then
+      execute format(
+        'alter table public.%I add column if not exists data_classification text not null default %L',
+        r.table_name,r.default_classification
+      );
+      v_constraint:='xzr_'||r.table_name||'_core_classification_check';
+      if not exists(
+        select 1 from pg_constraint
+        where conrelid=('public.'||r.table_name)::regclass and conname=v_constraint
+      ) then
+        execute format(
+          'alter table public.%I add constraint %I check(data_classification in (''PUBLIC_LOW'',''INTERNAL'',''CONFIDENTIAL'',''HIGHLY_SENSITIVE''))',
+          r.table_name,v_constraint
+        );
+      end if;
+    end if;
+  end loop;
+end
+$do$;
+
 -- ---------------------------------------------------------------------------
 -- 5) Direct table/API hard boundary
 -- ---------------------------------------------------------------------------
