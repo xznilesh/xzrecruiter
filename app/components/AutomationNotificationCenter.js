@@ -46,7 +46,7 @@ export default function AutomationNotificationCenter({initialData}){
   return <div className="manager-control">
     <div className="page-heading">
       <div><span className="page-kicker">Automation action center</span><h1>Notifications</h1><p>Only current operational exceptions that you are authorized to see. Resolved issues disappear automatically.</p></div>
-      <div className="mc-heading-actions"><button className="ghost-action" onClick={()=>refresh()} disabled={state==='loading'}>Refresh</button>{['OWNER','ADMIN','RECRUITMENT_MANAGER','ACCOUNT_MANAGER'].includes(String(data.role||''))?<Link className="primary-action" href="/manager">Manager control</Link>:null}</div>
+      <div className="mc-heading-actions"><button className="ghost-action" onClick={()=>refresh()} disabled={state==='loading'}>Refresh</button>{['OWNER','ADMIN','RECRUITMENT_MANAGER'].includes(String(data.role||''))?<Link className="primary-action" href="/manager">Manager control</Link>:null}</div>
     </div>
     {message?<div className={state==='error'?'save-error profile-error':'pipeline-feedback success'} role="status">{message}</div>:null}
     <div className="mc-filter-row">{['ALL','URGENT','ATTENTION','INFO'].map(x=><button key={x} className={filter===x?'active':''} onClick={()=>setFilter(x)}>{pretty(x)} {x==='ALL'?list(data.notifications).length:list(data.notifications).filter(n=>n.severity===x).length}</button>)}</div>
@@ -57,7 +57,7 @@ export default function AutomationNotificationCenter({initialData}){
       <p>{x.recommended_action}</p>
       <div className="mc-reasons">{list(x.reason_codes).map(r=><span key={r}>{pretty(r)}</span>)}</div>
       <div className="mc-notification-meta"><span>Due: {when(x.due_at)}</span><span>Seen {Number(x.occurrence_count||1)}×</span></div>
-      <div className="mc-row-actions">{x.job_id&&['OWNER','ADMIN','RECRUITMENT_MANAGER','ACCOUNT_MANAGER'].includes(String(data.role||''))?<Link href={'/manager/requirements/'+x.job_id}>Open requirement</Link>:null}{x.lifecycle!=='ACKNOWLEDGED'?<button onClick={()=>act(x.id,'ACKNOWLEDGE')}>Acknowledge</button>:null}<button onClick={()=>act(x.id,'DISMISS')}>Dismiss</button></div>
+      <div className="mc-row-actions">{x.job_id&&['OWNER','ADMIN','RECRUITMENT_MANAGER'].includes(String(data.role||''))?<Link href={'/manager/requirements/'+x.job_id}>Open requirement</Link>:null}{x.lifecycle!=='ACKNOWLEDGED'?<button onClick={()=>act(x.id,'ACKNOWLEDGE')}>Acknowledge</button>:null}<button onClick={()=>act(x.id,'DISMISS')}>Dismiss</button></div>
     </article>)}</div>:<div className="ats-empty">No active notifications in this filter.</div>}
   </div>;
 }
