@@ -5,7 +5,7 @@ import { extractJdDocumentText, JD_ALLOWED_MIME_TYPES, JD_MAX_FILE_BYTES } from 
 import { storageConfigured, uploadPrivateObject } from '@/lib/server-storage';
 import { validatePrivateUpload } from '@/lib/file-security';
 
-import { mutationRequestIsTrusted } from '@/lib/request-security';
+import { mutationRequestIsTrusted,declaredBodyWithin } from '@/lib/request-security';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 
@@ -14,8 +14,7 @@ function uuid(value){return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-
 
 export async function POST(req){
   if(!sameOrigin(req)||!mutationRequestIsTrusted(req))return NextResponse.json({error:'invalid_origin'},{status:403});
-  const declaredLength=Number(req.headers.get('content-length')||0);
-  if(declaredLength&&declaredLength>JD_MAX_FILE_BYTES+262144)return NextResponse.json({error:'request_too_large'},{status:413});
+  if(!declaredBodyWithin(req,JD_MAX_FILE_BYTES+262144))return NextResponse.json({error:'request_too_large'},{status:413});
   if(!storageConfigured())return NextResponse.json({error:'storage_not_configured'},{status:503});
   let form;
   try{form=await req.formData()}catch{return NextResponse.json({error:'invalid_multipart'},{status:400})}
