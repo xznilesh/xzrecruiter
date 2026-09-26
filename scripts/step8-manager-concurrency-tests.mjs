@@ -11,7 +11,7 @@ assert.ok(core.includes('uq_xzr_crm_task_automation'),'automation task duplicate
 assert.ok(sql.includes('for update;'),'alert/task mutation row locking missing');
 assert.ok(sql.includes("pg_advisory_xact_lock(hashtext('xzr-step8-'||p_agency::text))"),'full tenant automation lock missing');
 assert.ok(sql.includes("pg_try_advisory_xact_lock(hashtext('xzr-step8-event-'||v_row.agency_id::text))"),'event-worker tenant lock missing');
-assert.ok(sql.includes('on conflict(source_activity_event_id) do nothing'),'event outbox replay must be idempotent');
+assert.ok(core.includes('on conflict(source_activity_event_id) do nothing'),'event outbox replay must be idempotent');
 assert.ok(sql.includes('on conflict(agency_id,automation_key)'),'manager/automation task retry must be idempotent');
 assert.ok(core.includes('unique(agency_id,dedupe_key)')&&sql.includes("pg_advisory_xact_lock(hashtext('xzr-step8-'||p_agency::text))"),'alert retry must preserve one canonical alert under tenant serialization');
 assert.ok(sql.includes('last_detected_run_id is distinct from v_run')&&sql.includes('step8_alert_condition_holds'),'bounded scan must not resolve unseen-but-still-active issue');
