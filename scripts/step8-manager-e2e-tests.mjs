@@ -33,7 +33,7 @@ for(const token of [
   "event_status in ('PENDING','PROCESSING','PROCESSED','FAILED')",
   "'TARGET_GAP'","'SCREENING_OVERDUE'","'AM_REVIEW_BACKLOG'","'CLIENT_FEEDBACK_DELAY'",
   "lifecycle='RESOLVED'","resolution_reason='UNDERLYING_CONDITION_CLEARED'",
-  "candidate.intelligence_generated","screening.completed","submission.am_approved","submission.client_submitted",
+  "candidate.sourced","screening.completed","submission.am_approved","submission.client_submitted",
   "interview.scheduled","offer.created","candidate.joined"
 ]) assert.ok(contracts.includes(token),'golden path/automation contract missing '+token);
 
