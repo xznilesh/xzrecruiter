@@ -1254,3 +1254,17 @@ end;
 $$;
 revoke all on function public.xzrecruiter_step8_record_client_feedback(text,uuid,text,text) from public,anon,authenticated;
 grant execute on function public.xzrecruiter_step8_record_client_feedback(text,uuid,text,text) to anon,authenticated;
+
+
+-- DB-native scheduler. Tenant advisory locks make overlapping event/full runs retry-safe.
+select cron.schedule(
+  'xzrecruiter-step8-events',
+  '*/5 * * * *',
+  $step8_events$select public.xzrecruiter_run_step8_pending_events('pg-cron',25);$step8_events$
+);
+
+select cron.schedule(
+  'xzrecruiter-step8-full-reconcile',
+  '0 * * * *',
+  $step8_full$select public.xzrecruiter_run_step8_all_tenants('pg-cron');$step8_full$
+);
