@@ -20,7 +20,9 @@ function sameOrigin(req){const origin=req.headers.get('origin');return !origin||
 function uuid(value){return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value||''))}
 
 export async function POST(req){
-  if(!sameOrigin(req))return NextResponse.json({error:'invalid_origin'},{status:403});
+  if(!sameOrigin(req)||!mutationRequestIsTrusted(req))return NextResponse.json({error:'invalid_origin'},{status:403});
+  const declaredLength=Number(req.headers.get('content-length')||0);
+  if(declaredLength&&declaredLength>MAX_BYTES+262144)return NextResponse.json({error:'request_too_large'},{status:413});
   if(!storageConfigured())return NextResponse.json({error:'storage_not_configured'},{status:503});
   let form;try{form=await req.formData()}catch{return NextResponse.json({error:'invalid_multipart'},{status:400})}
   const jobId=String(form.get('jobId')||'');const candidateId=String(form.get('candidateId')||'');const file=form.get('file');
