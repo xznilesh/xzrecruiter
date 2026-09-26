@@ -56,7 +56,7 @@ export default function AutomationNotificationCenter({initialData}){
       <h2>{x.reason_summary}</h2>
       <p>{x.recommended_action}</p>
       <div className="mc-reasons">{list(x.reason_codes).map(r=><span key={r}>{pretty(r)}</span>)}</div>
-      <div className="mc-notification-meta"><span>Due: {when(x.due_at)}</span><span>Seen {Number(x.occurrence_count||1)}×</span></div>
+      <div className="mc-notification-meta"><span>Due: {when(x.due_at)}</span><span>Detected {Number(x.occurrence_count||1)}×</span></div>
       <div className="mc-row-actions">{x.job_id&&['OWNER','ADMIN','RECRUITMENT_MANAGER'].includes(String(data.role||''))?<Link href={'/manager/requirements/'+x.job_id}>Open requirement</Link>:null}{x.lifecycle!=='ACKNOWLEDGED'?<button onClick={()=>act(x.id,'ACKNOWLEDGE')}>Acknowledge</button>:null}<button onClick={()=>act(x.id,'DISMISS')}>Dismiss</button></div>
     </article>)}</div>:<div className="ats-empty">No active notifications in this filter.</div>}
   </div>;
