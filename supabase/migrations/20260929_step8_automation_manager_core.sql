@@ -2,6 +2,10 @@
 -- Core persistence only. Reuses canonical recruitment entities, crm_tasks and recruitment_activity_events.
 -- No Step-9 launch/production-QA functionality is introduced.
 
+-- Supabase-hosted Postgres supports pg_cron; Step 8 uses DB-native scheduling so
+-- automation does not depend on a manager opening the product.
+create extension if not exists pg_cron;
+
 -- Compatibility-safe canonical execution fields referenced by Step 3/7.
 alter table public.recruitment_jobs
   add column if not exists submission_target_daily integer not null default 0,
