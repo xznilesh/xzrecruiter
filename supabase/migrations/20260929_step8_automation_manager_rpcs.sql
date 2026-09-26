@@ -41,12 +41,17 @@ begin
     insert into public.automation_alert_events(agency_id,alert_id,event_type,metadata)
     values(p_agency,v_id,'CREATED',jsonb_build_object('run_id',p_run,'rule_code',p_rule));
   else
-    v_event:=case when v_lifecycle in ('RESOLVED','DISMISSED') then 'REOPENED'
-      when v_fp is distinct from p_fingerprint or v_last<=now()-make_interval(mins=>greatest(coalesce(p_cooldown_minutes,120),15)) then 'REFRESHED'
+    v_event:=case
+      when v_lifecycle='RESOLVED' then 'REOPENED'
+      when v_lifecycle='DISMISSED' and v_fp is distinct from p_fingerprint then 'REOPENED'
+      when v_lifecycle<>'DISMISSED' and (v_fp is distinct from p_fingerprint or v_last<=now()-make_interval(mins=>greatest(coalesce(p_cooldown_minutes,120),15))) then 'REFRESHED'
       else null end;
     update public.automation_alerts
     set rule_code=p_rule,category=p_category,severity=p_severity,
-        lifecycle=case when lifecycle in ('RESOLVED','DISMISSED') then 'OPEN' else lifecycle end,
+        lifecycle=case
+          when lifecycle='RESOLVED' then 'OPEN'
+          when lifecycle='DISMISSED' and source_fingerprint is distinct from p_fingerprint then 'OPEN'
+          else lifecycle end,
         entity_type=p_entity_type,entity_id=p_entity_id,job_id=p_job,application_id=p_application,
         candidate_id=p_candidate,owner_user_id=p_owner,target_role=p_target_role,
         reason_codes=coalesce(p_reasons,'[]'::jsonb),reason_summary=left(coalesce(p_summary,''),1500),
@@ -326,6 +331,47 @@ begin
     v_detected:=v_detected+1;
   end loop;
 
+  -- Candidate screening reminders. AI/hiring decisions remain outside automation; this only surfaces overdue human work.
+  for v_app in
+    select s.id,s.application_id,s.candidate_id,s.job_id,s.started_by_user_id owner_user_id,
+      s.updated_at,c.full_name
+    from public.application_screening_sessions s
+    join public.candidates c on c.id=s.candidate_id and c.agency_id=p_agency
+    where s.agency_id=p_agency and s.status in ('SCREENING_PENDING','IN_PROGRESS','FOLLOW_UP_REQUIRED')
+      and s.updated_at<now()-make_interval(hours=>v_cfg.screening_attention_hours)
+    order by s.updated_at limit 300
+  loop
+    perform private.xzrecruiter_step8_upsert_alert(
+      p_agency,v_run,'SCREENING_ACTION_OVERDUE','SCREENING_REMINDER',
+      case when v_app.updated_at<now()-make_interval(hours=>v_cfg.screening_risk_hours) then 'URGENT' else 'ATTENTION' end,
+      'screening',v_app.id,v_app.job_id,v_app.application_id,v_app.candidate_id,v_app.owner_user_id,'RECRUITER',
+      jsonb_build_array('SCREENING_OVERDUE'),coalesce(v_app.full_name,'Candidate')||' screening action is overdue',
+      'Complete or update the human screening action.',v_app.updated_at+make_interval(hours=>v_cfg.screening_attention_hours),
+      md5(v_app.id::text||'|SCREENING|'||v_app.updated_at::text),'{}'::jsonb,v_cfg.alert_cooldown_minutes
+    );
+    v_detected:=v_detected+1;
+  end loop;
+
+  -- Existing execution follow-ups remain the canonical tasks; automation creates an alert/escalation, not a duplicate task.
+  for v_app in
+    select t.id,t.job_id,t.application_id,t.candidate_id,t.assigned_user_id owner_user_id,t.title,t.due_at
+    from public.crm_tasks t
+    where t.agency_id=p_agency and t.archived_at is null and t.status in ('OPEN','IN_PROGRESS')
+      and t.due_at is not null and t.due_at<now()
+      and coalesce(t.task_type,'') not in ('AM_REVIEW','CLIENT_FEEDBACK')
+    order by t.due_at limit 500
+  loop
+    perform private.xzrecruiter_step8_upsert_alert(
+      p_agency,v_run,'FOLLOW_UP_OVERDUE','FOLLOW_UP_REMINDER',
+      case when v_app.due_at<now()-make_interval(hours=>v_cfg.followup_risk_hours) then 'URGENT' else 'ATTENTION' end,
+      'task',v_app.id,v_app.job_id,v_app.application_id,v_app.candidate_id,v_app.owner_user_id,null,
+      jsonb_build_array('FOLLOW_UP_OVERDUE'),coalesce(v_app.title,'Recruiter follow-up')||' is overdue',
+      'Complete the existing task or update its due action.',v_app.due_at,
+      md5(v_app.id::text||'|FOLLOWUP|'||v_app.due_at::text),'{}'::jsonb,v_cfg.alert_cooldown_minutes
+    );
+    v_detected:=v_detected+1;
+  end loop;
+
   -- AM review backlog + task.
   for v_sub in
     select s.id,s.application_id,s.candidate_id,s.job_id,s.assigned_am_user_id,s.internal_submitted_at,c.full_name
@@ -446,7 +492,7 @@ begin
   -- Resolve alerts not reproduced by this full-tenant run and close their automation-created tasks.
   with resolved as (
     update public.automation_alerts a set lifecycle='RESOLVED',resolved_at=now(),resolution_reason='UNDERLYING_CONDITION_CLEARED'
-    where a.agency_id=p_agency and a.lifecycle in ('OPEN','ACKNOWLEDGED')
+    where a.agency_id=p_agency and a.lifecycle in ('OPEN','ACKNOWLEDGED','DISMISSED')
       and a.last_detected_run_id is distinct from v_run
     returning a.id,a.dedupe_key
   )
