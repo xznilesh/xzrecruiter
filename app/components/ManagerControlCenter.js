@@ -69,6 +69,7 @@ export default function ManagerControlCenter({initialHome,initialNotifications,i
     catch(e){setState('error');setMessage(e.message)}
   }
 
+  const canControl=['OWNER','ADMIN','RECRUITMENT_MANAGER'].includes(String(home.role||''));
   const t=home.today||{};
   const reqs=list(home.requirements),recruiters=list(home.recruiters),exceptions=list(home.exceptions);
   const funnel=analytics.funnel||{};
@@ -85,7 +86,7 @@ export default function ManagerControlCenter({initialHome,initialNotifications,i
   return <div className="manager-control">
     <div className="page-heading">
       <div><span className="page-kicker">Step 8 · real-time operational control</span><h1>Manager Control Center</h1><p>Deterministic targets, health, exceptions and next operational actions. No hidden employee score.</p></div>
-      <div className="mc-heading-actions"><Link className="ghost-action" href="/notifications">Notification center</Link><button className="ghost-action" onClick={()=>refresh()} disabled={state==='loading'}>Refresh</button><button className="primary-action" onClick={runAutomation} disabled={state==='loading'}>Run controls now</button></div>
+      <div className="mc-heading-actions"><Link className="ghost-action" href="/notifications">Notification center</Link><button className="ghost-action" onClick={()=>refresh()} disabled={state==='loading'}>Refresh</button>{canControl?<button className="primary-action" onClick={runAutomation} disabled={state==='loading'}>Run controls now</button>:null}</div>
     </div>
 
     {message?<div className={state==='error'?'save-error profile-error':'pipeline-feedback success'} role="status">{message}</div>:null}
