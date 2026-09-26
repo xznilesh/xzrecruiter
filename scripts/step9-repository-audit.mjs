@@ -31,7 +31,8 @@ const secretRules=[
 for(const file of textFiles){
  const c=fs.readFileSync(file,'utf8');
  if(c.includes('<<<<<<< ')||c.includes('>>>>>>> ')||c.includes('======='))conflict.push(file);
- for(const [name,re] of secretRules)if(re.test(c))leaks.push(file+':'+name);
+ const scanned=c.replace(/postgresql:\/\/placeholder:placeholder@localhost:\d+\/postgres/g,'');
+ for(const [name,re] of secretRules){re.lastIndex=0;if(re.test(scanned))leaks.push(file+':'+name);}
 }
 assert.deepEqual(conflict,[],'merge conflict markers remain');
 assert.deepEqual(leaks,[],'secret-like committed material detected');
