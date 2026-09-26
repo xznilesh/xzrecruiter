@@ -6,7 +6,7 @@ import { storageConfigured, uploadPrivateObject } from '@/lib/server-storage';
 import { validatePrivateUpload } from '@/lib/file-security';
 import { consumeRateLimit,rateLimitIdentityForRequest } from '@/lib/rate-limit';
 
-import { mutationRequestIsTrusted } from '@/lib/request-security';
+import { mutationRequestIsTrusted,declaredBodyWithin } from '@/lib/request-security';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 
@@ -32,7 +32,8 @@ async function parseInput(req){
 }
 
 export async function POST(req){
- if(!sameOrigin(req))return NextResponse.json({error:'Invalid origin.'},{status:403});
+ if(!sameOrigin(req)||!mutationRequestIsTrusted(req))return NextResponse.json({error:'Invalid origin.'},{status:403});
+ if(!declaredBodyWithin(req,9*1024*1024))return NextResponse.json({error:'request_too_large'},{status:413});
  let input;try{input=await parseInput(req)}catch(error){return NextResponse.json({error:error?.message==='invalid_payload'?'Invalid application details.':'Invalid request.'},{status:400});}
  const {slug,file}=input;const payload={...(input.payload||{})};
  if(!slug)return NextResponse.json({error:'Missing job.'},{status:400});
