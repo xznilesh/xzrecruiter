@@ -51,5 +51,6 @@ for(const label of [
 
 assert.ok(notifications.includes('Resolved issues disappear automatically.'));
 assert.ok(notifications.includes('Acknowledge')&&notifications.includes('Dismiss'));
+assert.ok(req.includes('Acknowledge blocker'),'manager drilldown must expose blocker acknowledgement without pretending it resolves the blocker');
 
 console.log('STEP8_MANAGER_E2E_PASS target_gap_resolves=true screening_resolves=true am_backlog=true client_feedback=true health_recovery=true manager_ui=true');
