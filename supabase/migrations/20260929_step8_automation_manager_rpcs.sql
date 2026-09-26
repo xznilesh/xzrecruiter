@@ -547,6 +547,51 @@ $$;
 revoke all on function public.xzrecruiter_run_step8_all_tenants(text) from public,anon,authenticated;
 grant execute on function public.xzrecruiter_run_step8_all_tenants(text) to service_role;
 
+create or replace function public.xzrecruiter_run_step8_pending_events(
+  p_worker text default null,p_tenant_limit integer default 25
+) returns jsonb
+language plpgsql security definer
+set search_path='public','private','pg_temp'
+as $
+declare v_row record;v_result jsonb;v_results jsonb:='[]'::jsonb;v_processed integer:=0;v_failed integer:=0;
+begin
+  for v_row in
+    select e.agency_id,min(e.created_at) first_event
+    from public.automation_domain_events e
+    where e.event_status='PENDING'
+    group by e.agency_id
+    order by min(e.created_at)
+    limit greatest(1,least(coalesce(p_tenant_limit,25),100))
+  loop
+    if not pg_try_advisory_xact_lock(hashtext('xzr-step8-event-'||v_row.agency_id::text)) then
+      continue;
+    end if;
+    update public.automation_domain_events
+    set event_status='PROCESSING',attempt_count=least(attempt_count+1,20),last_error=null
+    where agency_id=v_row.agency_id and event_status='PENDING';
+    begin
+      v_result:=private.xzrecruiter_step8_run_agency(v_row.agency_id,'EVENT',left(coalesce(p_worker,'event-worker'),200));
+      update public.automation_domain_events
+      set event_status='PROCESSED',processed_at=now(),last_error=null
+      where agency_id=v_row.agency_id and event_status='PROCESSING';
+      v_processed:=v_processed+1;
+      v_results:=v_results||jsonb_build_array(jsonb_build_object('agency_id',v_row.agency_id,'ok',true,'result',v_result));
+    exception when others then
+      update public.automation_domain_events
+      set event_status=case when attempt_count>=5 then 'FAILED' else 'PENDING' end,
+          last_error=left(sqlstate||':'||sqlerrm,500)
+      where agency_id=v_row.agency_id and event_status='PROCESSING';
+      v_failed:=v_failed+1;
+      v_results:=v_results||jsonb_build_array(jsonb_build_object('agency_id',v_row.agency_id,'ok',false,'error','tenant_event_run_failed'));
+    end;
+  end loop;
+  return jsonb_build_object('ok',true,'processedTenants',v_processed,'failedTenants',v_failed,'tenants',v_results);
+end;
+$;
+revoke all on function public.xzrecruiter_run_step8_pending_events(text,integer) from public,anon,authenticated;
+grant execute on function public.xzrecruiter_run_step8_pending_events(text,integer) to service_role;
+
+
 create or replace function public.xzrecruiter_run_step8_manual(p_token text)
 returns jsonb
 language plpgsql security definer
