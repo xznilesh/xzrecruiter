@@ -35,8 +35,9 @@ export async function GET(req){
     if(mode==='analytics'){
       const from=req.nextUrl.searchParams.get('from')||null,to=req.nextUrl.searchParams.get('to')||null;
       const clientId=req.nextUrl.searchParams.get('clientId')||null,jobId=req.nextUrl.searchParams.get('jobId')||null,recruiterId=req.nextUrl.searchParams.get('recruiterId')||null;
-      if(clientId&&!uuid(clientId)||jobId&&!uuid(jobId)||recruiterId&&!uuid(recruiterId))return fail('invalid_filter',400,requestId);
-      const data=await getManagerAnalytics({from,to,clientId,jobId,recruiterId,source:req.nextUrl.searchParams.get('source')||null});
+      const accountManagerId=req.nextUrl.searchParams.get('accountManagerId')||null;
+      if(clientId&&!uuid(clientId)||jobId&&!uuid(jobId)||recruiterId&&!uuid(recruiterId)||accountManagerId&&!uuid(accountManagerId))return fail('invalid_filter',400,requestId);
+      const data=await getManagerAnalytics({from,to,clientId,jobId,recruiterId,accountManagerId,source:req.nextUrl.searchParams.get('source')||null});
       return data?NextResponse.json({...data,requestId}):fail('forbidden_or_unavailable',403,requestId);
     }
     return fail('unsupported_mode',400,requestId);
