@@ -909,7 +909,7 @@ grant execute on function public.xzrecruiter_step8_requirement_control(text,uuid
 
 create or replace function public.xzrecruiter_step8_analytics(
   p_token text,p_from timestamptz,p_to timestamptz,p_client uuid default null,p_job uuid default null,
-  p_recruiter uuid default null,p_source text default null
+  p_recruiter uuid default null,p_account_manager uuid default null,p_source text default null
 ) returns jsonb
 language plpgsql stable security definer
 set search_path='public','private','pg_temp'
@@ -929,6 +929,10 @@ begin
     where a.agency_id=v_agency and a.archived_at is null and a.created_at>=v_from and a.created_at<v_to
       and (p_client is null or j.client_id=p_client) and (p_job is null or a.job_id=p_job)
       and (p_recruiter is null or a.owner_user_id=p_recruiter)
+      and (p_account_manager is null or j.owner_user_id=p_account_manager or exists(
+        select 1 from public.candidate_submissions ams
+        where ams.agency_id=v_agency and ams.application_id=a.id and ams.assigned_am_user_id=p_account_manager
+      ))
       and (p_source is null or upper(coalesce(a.source_type,a.metadata->>'source','UNKNOWN'))=upper(p_source))
   )
   select jsonb_build_object(
@@ -950,6 +954,10 @@ begin
     where a.agency_id=v_agency and a.archived_at is null and a.created_at>=v_from and a.created_at<v_to
       and (p_client is null or j.client_id=p_client) and (p_job is null or a.job_id=p_job)
       and (p_recruiter is null or a.owner_user_id=p_recruiter)
+      and (p_account_manager is null or j.owner_user_id=p_account_manager or exists(
+        select 1 from public.candidate_submissions ams
+        where ams.agency_id=v_agency and ams.application_id=a.id and ams.assigned_am_user_id=p_account_manager
+      ))
       and (p_source is null or upper(coalesce(a.source_type,a.metadata->>'source','UNKNOWN'))=upper(p_source))
   )
   select coalesce(jsonb_agg(to_jsonb(x) order by x.candidates desc),'[]'::jsonb) into v_sources from (
@@ -974,8 +982,8 @@ begin
   return jsonb_build_object('ok',true,'from',v_from,'to',v_to,'cohortDefinition','APPLICATION_CREATED_IN_WINDOW','funnel',v_funnel,'sources',v_sources,'bottleneck',v_bottleneck);
 end;
 $$;
-revoke all on function public.xzrecruiter_step8_analytics(text,timestamptz,timestamptz,uuid,uuid,uuid,text) from public,anon,authenticated;
-grant execute on function public.xzrecruiter_step8_analytics(text,timestamptz,timestamptz,uuid,uuid,uuid,text) to anon,authenticated;
+revoke all on function public.xzrecruiter_step8_analytics(text,timestamptz,timestamptz,uuid,uuid,uuid,uuid,text) from public,anon,authenticated;
+grant execute on function public.xzrecruiter_step8_analytics(text,timestamptz,timestamptz,uuid,uuid,uuid,uuid,text) to anon,authenticated;
 
 create or replace function public.xzrecruiter_step8_manager_action(p_token text,p_action text,p_payload jsonb)
 returns jsonb
