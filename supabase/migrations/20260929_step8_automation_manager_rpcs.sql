@@ -826,16 +826,28 @@ begin
     'activeRequirements',(select count(*) from public.recruitment_jobs j where j.agency_id=v_agency and j.archived_at is null and j.recruiter_ready=true and j.requirement_state='OPEN' and j.approved_hiring_brief_id is not null and upper(coalesce(j.status,'OPEN'))='OPEN'),
     'plannedSubmissions',(select coalesce(sum(j.submission_target_daily),0) from public.recruitment_jobs j where j.agency_id=v_agency and j.archived_at is null and j.recruiter_ready=true and j.requirement_state='OPEN' and j.approved_hiring_brief_id is not null and upper(coalesce(j.status,'OPEN'))='OPEN'),
     'validSubmissions',(select count(distinct s.application_id)
-      from public.candidate_submissions s join public.applications ap on ap.id=s.application_id and ap.agency_id=v_agency
+      from public.candidate_submissions s
+      join public.applications ap on ap.id=s.application_id and ap.agency_id=v_agency
+      join public.recruitment_jobs j on j.id=s.job_id and j.agency_id=v_agency
       where s.agency_id=v_agency and s.workflow_status='CLIENT_SUBMITTED' and s.status='SUBMITTED'
+        and j.archived_at is null and j.recruiter_ready=true and j.requirement_state='OPEN'
+        and j.approved_hiring_brief_id is not null and upper(coalesce(j.status,'OPEN'))='OPEN'
         and s.invalidated_at is null and s.withdrawn_at is null
         and upper(coalesce(ap.stage,'')) not in ('WITHDRAWN','REJECTED')
         and s.client_submitted_at>=v_start and s.client_submitted_at<v_end),
-    'requirementsAtRisk',(select count(*) from public.requirement_health_current h where h.agency_id=v_agency and h.health_status in ('AT_RISK','BLOCKED')),
+    'requirementsAtRisk',(select count(*)
+      from public.requirement_health_current h
+      join public.recruitment_jobs j on j.id=h.job_id and j.agency_id=v_agency
+      where h.agency_id=v_agency and h.health_status in ('AT_RISK','BLOCKED')
+        and j.archived_at is null and j.recruiter_ready=true and j.requirement_state='OPEN'
+        and j.approved_hiring_brief_id is not null and upper(coalesce(j.status,'OPEN'))='OPEN'),
     'recruitersBelowTarget',(select count(*) from (
       select a.recruiter_user_id,coalesce(sum(a.daily_submission_target),0) planned,
         count(distinct s.application_id) completed
       from public.requirement_recruiter_assignments a
+      join public.recruitment_jobs j on j.id=a.job_id and j.agency_id=v_agency
+        and j.archived_at is null and j.recruiter_ready=true and j.requirement_state='OPEN'
+        and j.approved_hiring_brief_id is not null and upper(coalesce(j.status,'OPEN'))='OPEN'
       left join public.candidate_submissions s on s.agency_id=a.agency_id and s.job_id=a.job_id
         and s.created_by_user_id=a.recruiter_user_id and s.workflow_status='CLIENT_SUBMITTED' and s.status='SUBMITTED'
         and s.invalidated_at is null and s.withdrawn_at is null
@@ -884,6 +896,9 @@ begin
       (select count(*) from public.candidate_submissions cs where cs.agency_id=v_agency and cs.created_by_user_id=u.id and cs.workflow_status='CLIENT_SUBMITTED')::integer client_submissions_total,
       (select count(*) from public.interviews i join public.applications ap on ap.id=i.application_id and ap.agency_id=v_agency where i.agency_id=v_agency and ap.owner_user_id=u.id)::integer interviews_total
     from public.requirement_recruiter_assignments a
+    join public.recruitment_jobs j on j.id=a.job_id and j.agency_id=v_agency
+      and j.archived_at is null and j.recruiter_ready=true and j.requirement_state='OPEN'
+      and j.approved_hiring_brief_id is not null and upper(coalesce(j.status,'OPEN'))='OPEN'
     join public.users u on u.id=a.recruiter_user_id
     left join public.candidate_submissions s on s.agency_id=a.agency_id and s.job_id=a.job_id and s.created_by_user_id=a.recruiter_user_id
       and s.workflow_status='CLIENT_SUBMITTED' and s.status='SUBMITTED' and s.invalidated_at is null and s.withdrawn_at is null
