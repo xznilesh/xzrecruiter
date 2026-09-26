@@ -121,6 +121,7 @@ for (const key of ['organizationId','actorId','actorType','entityType','entityId
 const migration = fs.readFileSync('supabase/migrations/20260925_step1_workflow_contract_lock.sql','utf8');
 const ats = fs.readFileSync('lib/ats.js','utf8');
 const drawer = fs.readFileSync('app/components/ApplicationScreeningDrawer.js','utf8');
+const submissionUi = fs.readFileSync('app/components/SubmissionPackWorkspace.js','utf8');
 const api = fs.readFileSync('app/api/ats/route.js','utf8');
 
 for (const token of [
@@ -134,8 +135,8 @@ assert.ok(migration.includes('revoke execute on function public.xzrecruiter_move
 assert.ok(migration.includes("v_workflow_status in ('AM_APPROVED','AM_REJECTED','CLIENT_SUBMITTED')"), 'terminal submission states must not reopen as fresh recruiter drafts');
 assert.ok(ats.includes("moveApplication: ['xzrecruiter_move_application_workflow'"), 'API wrapper must use canonical transition guard');
 assert.ok(ats.includes('reviewInternalSubmission') && ats.includes('markClientSubmitted'), 'AM review/client release API boundaries missing');
-assert.ok(drawer.includes('Internal submission') && drawer.includes('Submit to AM'), 'recruiter handoff copy missing');
-assert.ok(!drawer.includes('Submit to client'), 'recruiter UI must not directly submit to client');
+assert.ok(submissionUi.includes('Send internally to Account Manager') && submissionUi.includes('Send to AM Quality Gate'), 'recruiter handoff copy missing');
+assert.ok(!drawer.includes('Submit to client') && submissionUi.includes("!isAm&&current.id&&['DRAFT','RETURNED_TO_RECRUITER'].includes(workflow)"), 'recruiter UI must not directly submit to client');
 assert.ok(api.includes('invalid_workflow_transition') && api.includes('am_quality_gate_required'), 'workflow errors must be explicit at API boundary');
 assert.ok(!/\bdrop\s+table\b|\btruncate\b|alter\s+table\s+[^;]+\s+drop\s+column/i.test(migration), 'Step-1 migration must not destroy valid existing data');
 
