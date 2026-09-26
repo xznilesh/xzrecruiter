@@ -91,7 +91,7 @@ export default function ManagerRequirementControl({jobId,initialContext}){
         <div className="mc-section-title"><div><span className="page-kicker">Next operational actions</span><h2>Grounded recommendations</h2></div></div>
         {actions.length?<div className="mc-action-list">{actions.map((a,i)=><article key={a.code||i}><b>{a.text}</b><p>{a.why}</p></article>)}</div>:<div className="ats-empty">No exception-driven action required.</div>}
       </section>
-    </div>
+    </div>:null}
 
     <section className="mc-card">
       <div className="mc-section-title"><div><span className="page-kicker">Funnel control</span><h2>Where candidates are now</h2></div></div>
@@ -114,7 +114,7 @@ export default function ManagerRequirementControl({jobId,initialContext}){
       </article>)}</div>:<div className="ats-empty">No active recruiter assignment.</div>}
     </section>
 
-    <div className="mc-grid two">
+    {canControl?<div className="mc-grid two">
       <section className="mc-card">
         <div className="mc-section-title"><div><span className="page-kicker">Manager intervention</span><h2>Requirement controls</h2></div></div>
         <div className="mc-form">
