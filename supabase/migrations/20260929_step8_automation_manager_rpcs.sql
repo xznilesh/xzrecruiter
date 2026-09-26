@@ -862,7 +862,7 @@ begin
       having coalesce(sum(a.daily_submission_target),0)>0 and count(distinct s.application_id)<coalesce(sum(a.daily_submission_target),0)
     ) x),
     'overdueRecruiterActions',(select count(*) from public.crm_tasks t where t.agency_id=v_agency and t.archived_at is null and t.status in ('OPEN','IN_PROGRESS') and t.due_at<now()),
-    'amReviewsPending',(select count(*) from public.candidate_submissions s where s.agency_id=v_agency and s.workflow_status='INTERNAL_SUBMITTED'),
+    'amReviewsPending',(select count(*) from public.candidate_submissions s where s.agency_id=v_agency and s.workflow_status='INTERNAL_SUBMITTED' and s.invalidated_at is null and s.withdrawn_at is null),
     'clientFeedbackPending',(select count(*) from public.automation_alerts a where a.agency_id=v_agency and a.lifecycle in ('OPEN','ACKNOWLEDGED') and a.category='CLIENT_FEEDBACK_REMINDER'),
     'interviewsToday',(select count(*) from public.interviews i where i.agency_id=v_agency and i.scheduled_at>=v_start and i.scheduled_at<v_end and upper(coalesce(i.status,'SCHEDULED'))='SCHEDULED'),
     'offersRequiringAction',(select count(*) from public.automation_alerts a where a.agency_id=v_agency and a.lifecycle in ('OPEN','ACKNOWLEDGED') and a.category='OFFER_ACTION'),
@@ -897,7 +897,12 @@ begin
       (select count(*) from public.application_screening_sessions ss where ss.agency_id=v_agency and ss.started_by_user_id=u.id and ss.status='QUALIFIED' and ss.completed_at>=v_start and ss.completed_at<v_end)::integer qualified_candidates,
       (select count(*) from public.crm_tasks t where t.agency_id=v_agency and t.assigned_user_id=u.id and t.archived_at is null and t.status in ('OPEN','IN_PROGRESS') and t.due_at<now())::integer overdue_followups,
       (select count(*) from public.applications ap where ap.agency_id=v_agency and ap.owner_user_id=u.id and ap.archived_at is null and upper(coalesce(ap.status,'ACTIVE'))='ACTIVE')::integer candidate_pipeline,
-      (select count(*) from public.candidate_submissions cs where cs.agency_id=v_agency and cs.created_by_user_id=u.id and cs.workflow_status='CLIENT_SUBMITTED')::integer client_submissions_total,
+      (select count(*) from public.candidate_submissions cs
+        join public.applications cap on cap.id=cs.application_id and cap.agency_id=v_agency
+        where cs.agency_id=v_agency and cs.created_by_user_id=u.id
+          and cs.workflow_status='CLIENT_SUBMITTED' and cs.status='SUBMITTED'
+          and cs.invalidated_at is null and cs.withdrawn_at is null
+          and upper(coalesce(cap.stage,'')) not in ('WITHDRAWN','REJECTED'))::integer client_submissions_total,
       (select count(*) from public.interviews i join public.applications ap on ap.id=i.application_id and ap.agency_id=v_agency where i.agency_id=v_agency and ap.owner_user_id=u.id)::integer interviews_total
     from public.requirement_recruiter_assignments a
     join public.recruitment_jobs j on j.id=a.job_id and j.agency_id=v_agency
@@ -926,7 +931,7 @@ begin
   ) x;
 
   select jsonb_build_object(
-    'waitingReview',(select count(*) from public.candidate_submissions where agency_id=v_agency and workflow_status='INTERNAL_SUBMITTED'),
+    'waitingReview',(select count(*) from public.candidate_submissions where agency_id=v_agency and workflow_status='INTERNAL_SUBMITTED' and invalidated_at is null and withdrawn_at is null),
     'returned',(select count(*) from public.candidate_submissions where agency_id=v_agency and workflow_status='RETURNED_TO_RECRUITER'),
     'approved',(select count(*) from public.candidate_submissions where agency_id=v_agency and workflow_status='AM_APPROVED'),
     'clientFeedbackPending',(select count(*) from public.automation_alerts where agency_id=v_agency and lifecycle in ('OPEN','ACKNOWLEDGED') and category='CLIENT_FEEDBACK_REMINDER')
@@ -1040,9 +1045,9 @@ begin
     'sourced',(select count(*) from public.applications a where a.agency_id=v_agency and a.job_id=p_job_id and a.archived_at is null),
     'screening',(select count(*) from public.application_screening_sessions s where s.agency_id=v_agency and s.job_id=p_job_id and s.status in ('SCREENING_PENDING','IN_PROGRESS','FOLLOW_UP_REQUIRED')),
     'qualified',(select count(*) from public.application_screening_sessions s where s.agency_id=v_agency and s.job_id=p_job_id and s.status='QUALIFIED'),
-    'internalSubmitted',(select count(*) from public.candidate_submissions s where s.agency_id=v_agency and s.job_id=p_job_id and s.workflow_status in ('INTERNAL_SUBMITTED','AM_APPROVED','CLIENT_SUBMITTED')),
-    'amApproved',(select count(*) from public.candidate_submissions s where s.agency_id=v_agency and s.job_id=p_job_id and s.workflow_status in ('AM_APPROVED','CLIENT_SUBMITTED')),
-    'clientSubmitted',(select count(*) from public.candidate_submissions s where s.agency_id=v_agency and s.job_id=p_job_id and s.workflow_status='CLIENT_SUBMITTED'),
+    'internalSubmitted',(select count(*) from public.candidate_submissions s where s.agency_id=v_agency and s.job_id=p_job_id and s.workflow_status in ('INTERNAL_SUBMITTED','AM_APPROVED','CLIENT_SUBMITTED') and s.invalidated_at is null and s.withdrawn_at is null),
+    'amApproved',(select count(*) from public.candidate_submissions s where s.agency_id=v_agency and s.job_id=p_job_id and s.workflow_status in ('AM_APPROVED','CLIENT_SUBMITTED') and s.invalidated_at is null and s.withdrawn_at is null),
+    'clientSubmitted',(select count(*) from public.candidate_submissions s join public.applications ap on ap.id=s.application_id and ap.agency_id=v_agency where s.agency_id=v_agency and s.job_id=p_job_id and s.workflow_status='CLIENT_SUBMITTED' and s.status='SUBMITTED' and s.invalidated_at is null and s.withdrawn_at is null and upper(coalesce(ap.stage,'')) not in ('WITHDRAWN','REJECTED')),
     'interviews',(select count(*) from public.interviews i join public.applications a on a.id=i.application_id and a.agency_id=v_agency where i.agency_id=v_agency and a.job_id=p_job_id),
     'offers',(select count(*) from public.offers o join public.applications a on a.id=o.application_id and a.agency_id=v_agency where o.agency_id=v_agency and a.job_id=p_job_id),
     'joinings',(select count(*) from public.placements p where p.agency_id=v_agency and p.job_id=p_job_id and p.status in ('STARTED','COMPLETED'))
@@ -1283,7 +1288,14 @@ begin
   if v_role not in ('OWNER','ADMIN','ACCOUNT_MANAGER') then return jsonb_build_object('ok',false,'error','forbidden'); end if;
   select job_id into v_job from public.applications where id=p_application_id and agency_id=v_agency and archived_at is null;
   if v_job is null then return jsonb_build_object('ok',false,'error','application_not_found'); end if;
-  if not exists(select 1 from public.candidate_submissions where agency_id=v_agency and application_id=p_application_id and workflow_status='CLIENT_SUBMITTED') then return jsonb_build_object('ok',false,'error','client_submission_required'); end if;
+  if not exists(
+    select 1 from public.candidate_submissions s
+    join public.applications ap on ap.id=s.application_id and ap.agency_id=v_agency
+    where s.agency_id=v_agency and s.application_id=p_application_id
+      and s.workflow_status='CLIENT_SUBMITTED' and s.status='SUBMITTED'
+      and s.invalidated_at is null and s.withdrawn_at is null
+      and upper(coalesce(ap.stage,'')) not in ('WITHDRAWN','REJECTED')
+  ) then return jsonb_build_object('ok',false,'error','client_submission_required'); end if;
   perform private.xzrecruiter_log_activity(v_agency,v_user,'application',p_application_id,'client.feedback_received','Client feedback recorded',jsonb_build_object('outcome',left(coalesce(p_outcome,''),100),'feedback',left(coalesce(p_feedback,''),1500),'job_id',v_job));
   return jsonb_build_object('ok',true);
 end;
