@@ -190,6 +190,26 @@ create table if not exists public.automation_alerts (
   unique(agency_id,dedupe_key)
 );
 
+create table if not exists public.automation_domain_events (
+  id uuid primary key default gen_random_uuid(),
+  agency_id uuid not null references public.agencies(id) on delete cascade,
+  source_activity_event_id uuid not null,
+  event_type text not null check (event_type in (
+    'REQUIREMENT_ACTIVATED','REQUIREMENT_UPDATED','RECRUITER_ASSIGNED','CANDIDATE_SOURCED',
+    'SCREENING_STARTED','SCREENING_COMPLETED','CANDIDATE_QUALIFIED','SUBMISSION_CREATED',
+    'SUBMISSION_RETURNED','SUBMISSION_AM_APPROVED','CLIENT_SUBMITTED','CLIENT_FEEDBACK_RECEIVED',
+    'INTERVIEW_SCHEDULED','INTERVIEW_COMPLETED','OFFER_CREATED','CANDIDATE_JOINED','TASK_CHANGED'
+  )),
+  entity_type text not null,
+  entity_id uuid not null,
+  event_status text not null default 'PENDING' check (event_status in ('PENDING','PROCESSING','PROCESSED','FAILED')),
+  attempt_count integer not null default 0 check (attempt_count between 0 and 20),
+  last_error text,
+  created_at timestamptz not null default now(),
+  processed_at timestamptz,
+  unique(source_activity_event_id)
+);
+
 create table if not exists public.automation_alert_events (
   id uuid primary key default gen_random_uuid(),
   agency_id uuid not null references public.agencies(id) on delete cascade,
@@ -210,19 +230,23 @@ create index if not exists idx_xzr_step8_alert_role
   on public.automation_alerts(agency_id,target_role,lifecycle,severity);
 create index if not exists idx_xzr_step8_runs
   on public.automation_runs(agency_id,started_at desc,run_status);
+create index if not exists idx_xzr_step8_domain_events_pending
+  on public.automation_domain_events(event_status,created_at,agency_id)
+  where event_status in ('PENDING','PROCESSING');
 
 alter table public.automation_control_configs enable row level security;
 alter table public.requirement_health_current enable row level security;
 alter table public.automation_runs enable row level security;
 alter table public.automation_alerts enable row level security;
 alter table public.automation_alert_events enable row level security;
+alter table public.automation_domain_events enable row level security;
 
 do $$
 declare t text;
 begin
   foreach t in array array[
     'automation_control_configs','requirement_health_current','automation_runs',
-    'automation_alerts','automation_alert_events'
+    'automation_alerts','automation_alert_events','automation_domain_events'
   ] loop
     if not exists(
       select 1 from pg_policies where schemaname='public' and tablename=t
@@ -281,3 +305,45 @@ as $$
   end;
 $$;
 revoke all on function private.xzrecruiter_has_permission(text,text) from public,anon,authenticated;
+
+
+-- Step-8 event outbox: recruitment activity is the canonical domain-event source.
+create or replace function private.xzrecruiter_step8_capture_domain_event()
+returns trigger
+language plpgsql security definer
+set search_path='public','private','pg_temp'
+as $$
+declare v_type text;v_action text:=lower(coalesce(new.action,''));
+begin
+  v_type:=case
+    when v_action in ('requirement.activated','requirement.am_approved','requirement.activated_for_recruiting') then 'REQUIREMENT_ACTIVATED'
+    when v_action in ('requirement.assigned','requirement.recruiter_assigned','requirement.assignment_updated') then 'RECRUITER_ASSIGNED'
+    when v_action like 'requirement.%' then 'REQUIREMENT_UPDATED'
+    when v_action in ('candidate.sourced','candidate.associated_with_requirement') then 'CANDIDATE_SOURCED'
+    when v_action in ('screening.started','candidate.screening_started') then 'SCREENING_STARTED'
+    when v_action in ('screening.completed','candidate.screening_completed') then 'SCREENING_COMPLETED'
+    when v_action in ('candidate.qualified','screening.qualified') then 'CANDIDATE_QUALIFIED'
+    when v_action in ('submission.created','submission.generated','submission.internal_submitted') then 'SUBMISSION_CREATED'
+    when v_action in ('submission.returned','submission.returned_to_recruiter') then 'SUBMISSION_RETURNED'
+    when v_action in ('submission.am_approved','submission.approved') then 'SUBMISSION_AM_APPROVED'
+    when v_action in ('submission.client_submitted','client.submitted') then 'CLIENT_SUBMITTED'
+    when v_action='client.feedback_received' then 'CLIENT_FEEDBACK_RECEIVED'
+    when v_action in ('interview.scheduled','interview.created') then 'INTERVIEW_SCHEDULED'
+    when v_action in ('interview.completed','interview.feedback_recorded') then 'INTERVIEW_COMPLETED'
+    when v_action in ('offer.created','offer.sent') then 'OFFER_CREATED'
+    when v_action in ('candidate.joined','placement.started','joining.confirmed') then 'CANDIDATE_JOINED'
+    when v_action in ('follow_up.created','task.completed','manager.task_created') then 'TASK_CHANGED'
+    else null end;
+  if v_type is null then return new; end if;
+  insert into public.automation_domain_events(agency_id,source_activity_event_id,event_type,entity_type,entity_id)
+  values(new.agency_id,new.id,v_type,new.entity_type,new.entity_id)
+  on conflict(source_activity_event_id) do nothing;
+  return new;
+end;
+$$;
+revoke all on function private.xzrecruiter_step8_capture_domain_event() from public,anon,authenticated;
+
+drop trigger if exists xzr_step8_activity_event_outbox on public.recruitment_activity_events;
+create trigger xzr_step8_activity_event_outbox
+after insert on public.recruitment_activity_events
+for each row execute function private.xzrecruiter_step8_capture_domain_event();
