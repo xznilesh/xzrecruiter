@@ -30,7 +30,7 @@ const secretRules=[
 ];
 for(const file of textFiles){
  const c=fs.readFileSync(file,'utf8');
- if(c.includes('<<<<<<< ')||c.includes('>>>>>>> ')||c.includes('======='))conflict.push(file);
+ if(file!=='scripts/step9-repository-audit.mjs'&&(c.includes('<<<<<<< ')||c.includes('>>>>>>> ')||c.includes('=======')))conflict.push(file);
  const scanned=c.replace(/postgresql:\/\/placeholder:placeholder@localhost:\d+\/postgres/g,'');
  for(const [name,re] of secretRules){re.lastIndex=0;if(re.test(scanned))leaks.push(file+':'+name);}
 }
