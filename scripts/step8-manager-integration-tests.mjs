@@ -76,6 +76,8 @@ assert.ok(rpcs.includes("grant execute on function public.xzrecruiter_run_step8_
 assert.ok(rpcs.includes("if v_role not in ('OWNER','ADMIN','ACCOUNT_MANAGER')"),'client feedback must preserve AM ownership boundary');
 assert.ok(rpcs.includes("'requirement_not_operational'")&&rpcs.includes("'invalid_requirement_transition'"),'manager mutations need canonical state guards');
 assert.ok(rpcs.includes("'manager.action_denied'"),'manager authorization denial security event missing');
+assert.ok(rpcs.includes("'blocker_not_found'")&&rpcs.includes("'blocker_preserved',true"),'blocker acknowledgement must preserve underlying blocker state');
+assert.ok(!/ACKNOWLEDGE_BLOCKER'[\s\S]{0,700}blocker_reason=null/.test(rpcs),'acknowledgement must not clear blocker_reason');
 
 assert.ok(api.includes('mutationRequestIsTrusted(req)')&&api.includes('declaredBodyWithin(req,MAX_BODY)'),'manager mutation request integrity missing');
 assert.ok(cronApi.includes('CRON_SECRET')&&cronApi.includes('serviceRpc'),'secured automation runner missing');
