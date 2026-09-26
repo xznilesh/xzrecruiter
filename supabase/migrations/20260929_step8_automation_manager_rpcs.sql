@@ -279,9 +279,11 @@ begin
       if coalesce(v_assignment.daily_submission_target,0)>0 then
         select count(distinct cs.application_id)::integer into v_valid
         from public.candidate_submissions cs
+        join public.applications ap on ap.id=cs.application_id and ap.agency_id=p_agency
         where cs.agency_id=p_agency and cs.job_id=v_job.id and cs.created_by_user_id=v_assignment.recruiter_user_id
           and cs.workflow_status='CLIENT_SUBMITTED' and cs.status='SUBMITTED'
           and cs.invalidated_at is null and cs.withdrawn_at is null
+          and upper(coalesce(ap.stage,'')) not in ('WITHDRAWN','REJECTED')
           and cs.client_submitted_at>=v_start and cs.client_submitted_at<v_end;
         if v_valid<v_assignment.daily_submission_target and v_hours_cutoff<=v_cfg.target_attention_hours_before_cutoff then
           v_alert:=private.xzrecruiter_step8_upsert_alert(
@@ -652,15 +654,25 @@ begin
   select jsonb_build_object(
     'activeRequirements',(select count(*) from public.recruitment_jobs j where j.agency_id=v_agency and j.archived_at is null and upper(coalesce(j.status,'OPEN'))='OPEN'),
     'plannedSubmissions',(select coalesce(sum(j.submission_target_daily),0) from public.recruitment_jobs j where j.agency_id=v_agency and j.archived_at is null and upper(coalesce(j.status,'OPEN'))='OPEN'),
-    'validSubmissions',(select count(distinct s.application_id) from public.candidate_submissions s where s.agency_id=v_agency and s.workflow_status='CLIENT_SUBMITTED' and s.status='SUBMITTED' and s.invalidated_at is null and s.withdrawn_at is null and s.client_submitted_at>=v_start and s.client_submitted_at<v_end),
+    'validSubmissions',(select count(distinct s.application_id)
+      from public.candidate_submissions s join public.applications ap on ap.id=s.application_id and ap.agency_id=v_agency
+      where s.agency_id=v_agency and s.workflow_status='CLIENT_SUBMITTED' and s.status='SUBMITTED'
+        and s.invalidated_at is null and s.withdrawn_at is null
+        and upper(coalesce(ap.stage,'')) not in ('WITHDRAWN','REJECTED')
+        and s.client_submitted_at>=v_start and s.client_submitted_at<v_end),
     'requirementsAtRisk',(select count(*) from public.requirement_health_current h where h.agency_id=v_agency and h.health_status in ('AT_RISK','BLOCKED')),
     'recruitersBelowTarget',(select count(*) from (
-      select a.recruiter_user_id,a.daily_submission_target,count(distinct s.application_id) completed
+      select a.recruiter_user_id,coalesce(sum(a.daily_submission_target),0) planned,
+        count(distinct s.application_id) completed
       from public.requirement_recruiter_assignments a
-      left join public.candidate_submissions s on s.agency_id=a.agency_id and s.job_id=a.job_id and s.created_by_user_id=a.recruiter_user_id and s.workflow_status='CLIENT_SUBMITTED' and s.status='SUBMITTED' and s.invalidated_at is null and s.withdrawn_at is null and s.client_submitted_at>=v_start and s.client_submitted_at<v_end
-      where a.agency_id=v_agency and a.assignment_status='ACTIVE' and a.daily_submission_target>0
-      group by a.recruiter_user_id,a.daily_submission_target
-      having count(distinct s.application_id)<a.daily_submission_target
+      left join public.candidate_submissions s on s.agency_id=a.agency_id and s.job_id=a.job_id
+        and s.created_by_user_id=a.recruiter_user_id and s.workflow_status='CLIENT_SUBMITTED' and s.status='SUBMITTED'
+        and s.invalidated_at is null and s.withdrawn_at is null
+        and s.client_submitted_at>=v_start and s.client_submitted_at<v_end
+        and exists(select 1 from public.applications ap where ap.agency_id=v_agency and ap.id=s.application_id and upper(coalesce(ap.stage,'')) not in ('WITHDRAWN','REJECTED'))
+      where a.agency_id=v_agency and a.assignment_status='ACTIVE'
+      group by a.recruiter_user_id
+      having coalesce(sum(a.daily_submission_target),0)>0 and count(distinct s.application_id)<coalesce(sum(a.daily_submission_target),0)
     ) x),
     'overdueRecruiterActions',(select count(*) from public.crm_tasks t where t.agency_id=v_agency and t.archived_at is null and t.status in ('OPEN','IN_PROGRESS') and t.due_at<now()),
     'amReviewsPending',(select count(*) from public.candidate_submissions s where s.agency_id=v_agency and s.workflow_status='INTERNAL_SUBMITTED'),
@@ -700,7 +712,10 @@ begin
       (select count(*) from public.interviews i join public.applications ap on ap.id=i.application_id and ap.agency_id=v_agency where i.agency_id=v_agency and ap.owner_user_id=u.id)::integer interviews_total
     from public.requirement_recruiter_assignments a
     join public.users u on u.id=a.recruiter_user_id
-    left join public.candidate_submissions s on s.agency_id=a.agency_id and s.job_id=a.job_id and s.created_by_user_id=a.recruiter_user_id and s.workflow_status='CLIENT_SUBMITTED' and s.status='SUBMITTED' and s.invalidated_at is null and s.withdrawn_at is null and s.client_submitted_at>=v_start and s.client_submitted_at<v_end
+    left join public.candidate_submissions s on s.agency_id=a.agency_id and s.job_id=a.job_id and s.created_by_user_id=a.recruiter_user_id
+      and s.workflow_status='CLIENT_SUBMITTED' and s.status='SUBMITTED' and s.invalidated_at is null and s.withdrawn_at is null
+      and s.client_submitted_at>=v_start and s.client_submitted_at<v_end
+      and exists(select 1 from public.applications vp where vp.agency_id=v_agency and vp.id=s.application_id and upper(coalesce(vp.stage,'')) not in ('WITHDRAWN','REJECTED'))
     where a.agency_id=v_agency and a.assignment_status='ACTIVE'
     group by u.id,u.display_name,u.email
     limit 100
