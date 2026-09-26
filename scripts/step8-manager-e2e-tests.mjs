@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { evaluateRequirementHealth,nextOperationalActions,targetState } from '../lib/manager-control.mjs';
 
+const core=fs.readFileSync('supabase/migrations/20260929_step8_automation_manager_core.sql','utf8');
 const sql=fs.readFileSync('supabase/migrations/20260929_step8_automation_manager_rpcs.sql','utf8');
+const contracts=core+'\n'+sql;
 const manager=fs.readFileSync('app/components/ManagerControlCenter.js','utf8');
 const req=fs.readFileSync('app/components/ManagerRequirementControl.js','utf8');
 const notifications=fs.readFileSync('app/components/AutomationNotificationCenter.js','utf8');
@@ -33,7 +35,7 @@ for(const token of [
   "lifecycle='RESOLVED'","resolution_reason='UNDERLYING_CONDITION_CLEARED'",
   "candidate.intelligence_generated","screening.completed","submission.am_approved","submission.client_submitted",
   "interview.scheduled","offer.created","candidate.joined"
-]) assert.ok(sql.includes(token),'golden path/automation contract missing '+token);
+]) assert.ok(contracts.includes(token),'golden path/automation contract missing '+token);
 
 for(const label of [
   'Active requirements','Planned submissions','Valid submissions','Remaining gap',
