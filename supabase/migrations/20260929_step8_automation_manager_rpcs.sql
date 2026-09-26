@@ -1227,13 +1227,16 @@ begin
     if not found then return jsonb_build_object('ok',false,'error','assignment_not_found'); end if;
     perform private.xzrecruiter_log_activity(v_agency,v_user,'job',v_job,'requirement.target_changed','Manager changed recruiter target',jsonb_build_object('recruiter_user_id',v_recruiter,'daily_target',p_payload->>'dailyTarget','total_target',p_payload->>'totalTarget'));
   elsif v_action='CREATE_MANAGER_TASK' then
+    if nullif(btrim(coalesce(p_payload->>'idempotencyKey','')),'') is null then
+      return jsonb_build_object('ok',false,'error','idempotency_key_required');
+    end if;
     begin v_recruiter:=nullif(p_payload->>'assignedUserId','')::uuid; exception when others then v_recruiter:=null; end;
     if v_recruiter is not null and not exists(select 1 from public.agency_memberships where agency_id=v_agency and user_id=v_recruiter) then return jsonb_build_object('ok',false,'error','invalid_assignee'); end if;
     insert into public.crm_tasks(agency_id,title,description,status,priority,due_at,assigned_user_id,created_by_user_id,job_id,task_type,automation_key)
     values(v_agency,left(coalesce(p_payload->>'title','Manager action'),500),left(coalesce(p_payload->>'description',''),2000),'OPEN',
       case when upper(coalesce(p_payload->>'priority','NORMAL')) in ('LOW','NORMAL','HIGH','URGENT') then upper(coalesce(p_payload->>'priority','NORMAL')) else 'NORMAL' end,
       nullif(p_payload->>'dueAt','')::timestamptz,v_recruiter,v_user,v_job,'MANAGER_CLARIFICATION',
-      case when nullif(p_payload->>'idempotencyKey','') is null then null else 'manager:'||left(p_payload->>'idempotencyKey',160) end)
+      'manager:'||left(btrim(p_payload->>'idempotencyKey'),160))
     on conflict(agency_id,automation_key) where automation_key is not null and archived_at is null
     do update set title=excluded.title,description=excluded.description,priority=excluded.priority,due_at=excluded.due_at,
       assigned_user_id=excluded.assigned_user_id,updated_at=now()
